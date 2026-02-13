@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "同步游戏约定文件",
+  "description": "每次 AI 执行完成后，检查 .kiro/steering/game-conventions.md 是否需要更新，确保术语表、架构约定和设计决策与当前代码和需求文档保持一致。",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查本次操作是否涉及以下变更：新增/修改术语定义、架构约定变化、设计决策调整、新增资源、士兵定敌人类型等、配置文件结构变化。如果有，请同步更新 .kiro/steering/game-conventions.md 中的对应部分。如果没有相关变更则无需操作。"
+  },
+  "workspaceFolderName": "UndergroundCastle",
+  "shortName": "sync-game-conventions"
+}

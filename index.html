@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Underground Castle - 关外经营</title>
+    <style>
+        body {
+            margin: 0;
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            border: 2px solid #444;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script src="outside-config.js"></script>
+    <script src="outside-logic.js"></script>
+    <script>
+    // 加载外置配置，覆盖默认值
+    function loadConfigs() {
+        if (typeof OUTSIDE_CONFIG_EXTERNAL !== 'undefined') {
+            var cfg = OUTSIDE_CONFIG_EXTERNAL;
+            // 应用按钮冷却配置（已在 ButtonManager.onClick 中动态读取）
+            // 应用 Canvas 尺寸
+            var canvas = document.getElementById('gameCanvas');
+            canvas.width = cfg.canvas ? cfg.canvas.width : 800;
+            canvas.height = cfg.canvas ? cfg.canvas.height : 600;
+        }
+    }
+
+    // 初始化游戏
+    function initGame() {
+        loadConfigs();
+
+        var canvas = document.getElementById('gameCanvas');
+
+        // 恢复存档
+        var saved = SaveSystem.load();
+        ResourceManager.gold = saved.gold;
+        ResourceManager.stone = saved.stone;
+        ResourceManager.wood = saved.wood;
+
+        // 初始化渲染器和输入
+        CanvasRenderer.init(canvas);
+        InputHandler.init(canvas, ButtonManager);
+
+        // 资源变化时自动存档 — 包装原始方法
+        var origAddGold = ResourceManager.addGold;
+        var origAddStone = ResourceManager.addStone;
+        var origAddWood = ResourceManager.addWood;
+
+        ResourceManager.addGold = function(amount) {
+            origAddGold.call(ResourceManager, amount);
+            SaveSystem.save(ResourceManager.getResources());
+        };
+        ResourceManager.addStone = function(amount) {
+            origAddStone.call(ResourceManager, amount);
+            SaveSystem.save(ResourceManager.getResources());
+        };
+        ResourceManager.addWood = function(amount) {
+            origAddWood.call(ResourceManager, amount);
+            SaveSystem.save(ResourceManager.getResources());
+        };
+
+        // 启动游戏循环
+        requestAnimationFrame(gameLoop);
+    }
+
+    // 游戏主循环
+    function gameLoop(timestamp) {
+        CanvasRenderer.render(ResourceManager, ButtonManager, timestamp);
+        requestAnimationFrame(gameLoop);
+    }
+
+    // 启动
+    initGame();
+    </script>
+</body>
+</html>
