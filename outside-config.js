@@ -14,6 +14,16 @@ var OUTSIDE_CONFIG_EXTERNAL = {
     canvas: {
         width: 800,
         height: 600
+    },
+    pages: {
+        swipeThreshold: 0.3,      // 拖拽切换阈值（Canvas 宽度的比例）
+        animationDuration: 300    // 切换动画时长（毫秒）
+    },
+    toast: {
+        speed: 30,                // 下降速度（像素/秒）
+        duration: 2000,           // 生命周期（毫秒）
+        fontSize: 20,             // 字体大小
+        spacing: 28               // Toast 间距（像素）
     }
 };
 

@@ -1,79 +1,143 @@
 # 实施计划：关外经营系统（OutsidethePass）
 
-## 概述
-
-基于设计文档，将关外经营系统拆分为增量式编码任务。核心逻辑放在 `outside-logic.js` 中便于测试和复用，`index.html` 负责 Canvas 渲染和事件绑定，`outside-config.js` 提供外置配置。
-
 ## Tasks
 
 - [x] 1. 创建外置配置和核心逻辑模块
-  - [x] 1.1 创建 `outside-config.js`，定义 `OUTSIDE_CONFIG_EXTERNAL` 全局变量，包含炼金和收集的冷却时间、产出数量、Canvas 尺寸等配置
-    - _Requirements: 1.3, 2.4_
-  - [x] 1.2 创建 `outside-logic.js`，实现 `randomInt(min, max)` 工具函数和 `ResourceManager`（gold/stone/wood 属性，addGold/addStone/addWood/getResources 方法）
-    - _Requirements: 1.1, 2.1, 2.2_
-  - [x] 1.3 在 `outside-logic.js` 中实现 `ButtonManager`，包含 `isInCooldown(buttonName, now)`、`getRemainingCooldown(buttonName, now)`、`handleClick(x, y, now)` 和 `isPointInButton(x, y, button)` 方法
-    - _Requirements: 1.1, 1.3, 1.5, 2.1, 2.4, 2.6, 5.3_
-  - [x] 1.4 在 `outside-logic.js` 中实现 `SaveSystem`，包含 `save(resources)` 和 `load()` 方法，处理 localStorage 读写和异常情况
-    - _Requirements: 4.1, 4.2, 4.3_
+  - [x] 1.1 创建 `outside-config.js`（OUTSIDE_CONFIG_EXTERNAL：冷却、产出、Canvas、页面切换配置）_Req: 1.3, 2.4, 6.7, 6.8_
+  - [x] 1.2 创建 `outside-logic.js`（randomInt + ResourceManager：5种资源，add/hasEnough/deduct/getResources）_Req: 1.1, 2.1, 2.2, 8.1_
+  - [x] 1.3 ButtonManager（isInCooldown/getRemainingCooldown/handleClick/isPointInButton）_Req: 1.1, 1.3, 1.5, 2.1, 2.4, 2.6, 5.3_
+  - [x] 1.4 SaveSystem（save/load，处理异常和旧存档兼容）_Req: 4.1-4.3, 8.4-8.6, 9.6-9.7, 13.1-13.2_
 
-- [ ] 2. 设置测试环境并编写核心逻辑测试
-  - [ ] 2.1 初始化 `package.json`，安装 vitest 和 fast-check 依赖，配置测试脚本
-    - 运行 `npm init -y`，然后 `npm install --save-dev vitest fast-check`
-    - 在 package.json 中添加 `"test": "vitest --run"` 脚本
-  - [ ]* 2.2 写属性测试：炼金按钮产出正确性
-    - **Property 1: 炼金按钮产出正确性**
-    - 生成随机初始 gold 值和随机时间戳，验证非冷却状态下 gold +1，冷却状态下 gold 不变
-    - **Validates: Requirements 1.1, 1.5**
-  - [ ]* 2.3 写属性测试：收集按钮产出范围正确性
-    - **Property 2: 收集按钮产出范围正确性**
-    - 生成随机初始 stone/wood 值和随机时间戳，验证非冷却状态下增量在 [3,6]，冷却状态下不变
-    - **Validates: Requirements 2.1, 2.2, 2.6**
-  - [ ]* 2.4 写属性测试：冷却时间计算正确性
-    - **Property 3: 冷却时间计算正确性**
-    - 生成随机点击时间和查询时间，验证 isInCooldown 和 getRemainingCooldown 的返回值
-    - **Validates: Requirements 1.3, 1.4, 2.4, 2.5**
-  - [ ]* 2.5 写属性测试：存档读写往返一致性（Round Trip）
-    - **Property 5: 存档读写往返一致性**
-    - 生成随机合法资源状态，验证 save → load 往返一致
-    - **Validates: Requirements 4.1, 4.2**
-  - [ ]* 2.6 写属性测试：点击命中检测正确性
-    - **Property 6: 点击命中检测正确性**
-    - 生成随机矩形和随机点击坐标，验证 isPointInButton 的几何正确性
-    - **Validates: Requirements 5.3**
-  - [ ]* 2.7 写单元测试：localStorage 异常处理
-    - 测试数据缺失返回默认值、数据损坏（非法 JSON）返回默认值、字段缺失时缺失字段默认为 0
-    - 测试冷却恰好到期时按钮可再次点击
-    - _Requirements: 4.3_
+- [x] 2. 实现 PageManager 核心逻辑
+  - [x] 2.1 PageManager 状态和 getTargetOffset/shouldSwitchPage _Req: 6.1, 6.7, 6.8_
+  - [x] 2.2 startDrag/updateDrag/endDrag（含边界限制）_Req: 6.4-6.6, 6.10-6.11_
+  - [x] 2.3 updateAnimation（easeOut 缓动，动画中禁止拖拽）_Req: 6.7-6.9_
 
-- [ ] 3. Checkpoint - 核心逻辑验证
-  - 确保所有测试通过，如有问题请向用户确认。
+- [x] 3. 实现工匠与工作岗位核心逻辑
+  - [x] 3.1 创建 `job-config.js`（JOB_CONFIG_EXTERNAL：farmer/baker/dormitory）_Req: 7.1-7.3_
+  - [x] 3.2 CraftsmanManager（totalCapacity/getAssigned/getAvailable/addCapacity/canAssign）_Req: 9.1-9.2_
+  - [x] 3.3 JobManager（init/assign/unassign/update/calculateProduction，Baker wheat不足处理）_Req: 10.1-10.4, 7.4_
+  - [x] 3.4 BuildingManager（init/canBuild/build/getBuildCounts）_Req: 11.2-11.5_
 
-- [x] 4. 实现 Canvas 渲染和主页面
-  - [x] 4.1 在 `outside-logic.js` 中实现 `CanvasRenderer`，包含 `init(canvas)`、`render(resourceManager, buttonManager, now)`、`drawButton(button, label, now)`、`drawResources(resources)` 和 `drawCooldown(button, now)` 方法
-    - _Requirements: 5.1, 5.2, 5.4_
-  - [x] 4.2 在 `outside-logic.js` 中实现 `InputHandler.init(canvas, buttonManager)`，绑定 Canvas 点击事件并转换坐标
-    - _Requirements: 5.3_
-  - [x] 4.3 创建 `index.html`，引入 `outside-config.js` 和 `outside-logic.js`，设置 Canvas 元素，实现 `loadConfigs()` 加载外置配置，实现 `gameLoop` 主循环，初始化所有模块并启动游戏
-    - _Requirements: 1.1, 1.2, 1.3, 2.1, 2.3, 2.4, 3.1, 4.2, 5.1, 5.2_
-  - [ ]* 4.4 写属性测试：资源显示一致性
-    - **Property 4: 资源显示一致性**
-    - 生成随机资源状态，验证渲染输出包含所有资源数值
-    - **Validates: Requirements 1.2, 2.3, 3.1, 3.2**
+- [x] 4. 实现 Canvas 渲染和双页面界面
+  - [x] 4.1 CanvasRenderer（init/render/drawCastlePage/drawKingdomPage/drawPageTitle/drawButton/drawResources/drawCooldown）_Req: 5.1-5.2, 5.4, 6.2-6.3_
+  - [x] 4.2 InputHandler（mouse/touch事件，区分拖拽和点击，按当前页面响应）_Req: 5.3, 6.4-6.6_
+  - [x] 4.3 创建 `index.html`（Canvas + 引入配置/逻辑 + initGame/gameLoop + 存档集成）_Req: 1.1-1.3, 2.1, 2.3-2.4, 3.1, 4.1-4.2, 5.1-5.2, 6.1_
 
-- [ ] 5. 集成与存档联动
-  - [ ] 5.1 在 `index.html` 中将 ResourceManager 的 addGold/addStone/addWood 方法与 SaveSystem.save 联动，确保每次资源变化后自动触发存档
-    - _Requirements: 4.1_
-  - [ ] 5.2 在 `index.html` 初始化时调用 SaveSystem.load() 恢复资源状态到 ResourceManager
-    - _Requirements: 4.2_
+- [ ] 5. 设置测试环境
+  - [ ] 5.1 npm init + 安装 vitest/fast-check + 配置 test 脚本
 
-- [ ] 6. Final Checkpoint - 全部验证
-  - 确保所有测试通过，在浏览器中打开 index.html 验证炼金和收集按钮功能正常、冷却倒计时显示正确、资源数值实时更新、刷新页面后资源恢复。如有问题请向用户确认。
+- [ ] 6. 编写核心逻辑属性测试
+  - [ ]* 6.1 Property 1: 炼金按钮产出正确性 _Validates: 1.1, 1.5_
+  - [ ]* 6.2 Property 2: 收集按钮产出范围正确性 _Validates: 2.1, 2.2, 2.6_
+  - [ ]* 6.3 Property 3: 冷却时间计算正确性 _Validates: 1.3, 1.4, 2.4, 2.5_
+  - [ ]* 6.4 Property 5: 存档读写往返一致性 _Validates: 4.1, 4.2_
+  - [ ]* 6.5 Property 6: 点击命中检测正确性 _Validates: 5.3_
+  - [ ]* 6.6 单元测试：localStorage 异常处理 + 冷却到期边界 _Req: 4.3_
+
+- [ ] 7. 编写 PageManager 属性测试
+  - [ ]* 7.1 Property 9: 页面切换阈值判断正确性 _Validates: 6.7, 6.8_
+  - [ ]* 7.2 Property 10: 动画期间拖拽锁定 _Validates: 6.9_
+  - [ ]* 7.3 Property 11: 页面偏移量边界约束 _Validates: 6.10, 6.11_
+  - [ ]* 7.4 Property 8: 拖拽跟随正确性 _Validates: 6.6_
+  - [ ]* 7.5 Property 7: 页面切换往返一致性 _Validates: 6.4, 6.5_
+
+- [ ] 8. 编写工匠与岗位属性测试
+  - [ ]* 8.1 Property 12: 配置驱动初始化正确性 _Validates: 7.2, 7.3, 7.4_
+  - [ ]* 8.2 Property 13: 扩展存档往返一致性 _Validates: 8.4, 8.5, 9.6, 9.7, 13.2_
+  - [ ]* 8.3 Property 14: 工匠不变量 _Validates: 9.1, 9.3, 9.4, 12.3, 12.4_
+  - [ ]* 8.4 Property 15: 工匠分配拒绝 _Validates: 9.5_
+  - [ ]* 8.5 Property 16: 产出时机正确性 _Validates: 10.1_
+  - [ ]* 8.6 Property 17: Farmer 产出正确性 _Validates: 10.2_
+  - [ ]* 8.7 Property 18: Baker 产出正确性 _Validates: 10.3, 10.4_
+  - [ ]* 8.8 Property 19: 建造正确性 _Validates: 11.3, 11.4, 11.5_
+  - [ ]* 8.9 单元测试：工匠与岗位边界情况 _Req: 8.6, 10.4, 11.5, 12.5, 12.6, 13.1_
+
+- [ ] 9. Checkpoint - 核心逻辑与属性测试验证
+
+- [x] 10. 扩展 CanvasRenderer 渲染新内容
+  - [x] 10.1 drawResources 显示 wheat/bread _Req: 8.2, 8.3_
+  - [x] 10.2 drawCastlePage 渲染工匠状态/岗位列表/建造按钮 _Req: 11.1, 11.6, 12.1-12.2, 12.5-12.6_
+  - [ ]* 10.3 Property 4: 资源显示一致性 _Validates: 1.2, 2.3, 3.1, 3.2_
+  - [ ]* 10.4 Property 20: 资源显示包含新资源 _Validates: 8.2, 8.3_
+
+- [x] 11. 扩展 InputHandler 和 index.html 集成新模块
+  - [x] 11.1 InputHandler 处理 Build_Button/Job +/- 按钮点击 _Req: 11.2, 12.3, 12.4_
+  - [x] 11.2 index.html 集成新模块（job-config引入/初始化/存档恢复/gameLoop/自动存档）_Req: 7.2-7.3, 10.1, 10.5, 8.4, 9.6-9.7_
+
+- [ ] 12. Final Checkpoint - 全系统验证
+
+- [x] 13. 实现 ToastManager 核心逻辑
+  - [x] 13.1 outside-config.js 添加 toast 配置 _Req: 19.1_
+  - [x] 13.2 outside-logic.js 实现 RESOURCE_NAMES + ToastManager（getConfig/addToast/addResourceToasts/update/render）_Req: 14-17, 19_
+
+- [x] 14. 集成 ToastManager 到游戏循环
+  - [x] 14.1 index.html 包装 ResourceManager.add*/deduct + JobManager.update 触发 Toast，gameLoop 集成 _Req: 14.1, 15.1, 17.1, 18.1-18.4_
+
+- [ ] 15. Checkpoint - Toast 系统验证
+
+- [ ] 16. 编写 Toast 属性测试和单元测试
+  - [ ]* 16.1 Property 21: 资源变化触发 Toast 创建 _Validates: 14.1, 14.3, 15.1, 15.3_
+  - [ ]* 16.2 Property 22: Toast 文字格式与颜色正确性 _Validates: 14.2, 15.2_
+  - [ ]* 16.3 Property 23: Toast 初始位置正确性 _Validates: 16.1_
+  - [ ]* 16.4 Property 24: Toast 堆叠排列正确性 _Validates: 16.2, 16.3_
+  - [ ]* 16.5 Property 25: Toast 下降位移正确性 _Validates: 17.1_
+  - [ ]* 16.6 Property 26: Toast 透明度生命周期正确性 _Validates: 17.2, 17.4_
+  - [ ]* 16.7 Property 27: Toast 过期移除 _Validates: 17.3_
+  - [ ]* 16.8 Property 28: Toast 配置驱动 _Validates: 19.1_
+  - [ ]* 16.9 单元测试：Toast 边界情况 _Req: 14.2, 15.2, 17.1-17.3, 19.2_
+
+- [ ] 17. Final Checkpoint - 全系统验证（含 Toast）
+
+- [x] 18. 实现 Production Tick 倒计时和产出预览
+  - [x] 18.1 在 JobManager 中添加 getRemainingSeconds(now) 方法
+    - lastTickTime=0 时返回完整周期秒数
+    - 正常情况返回 Math.ceil((interval - elapsed) / 1000)
+    - remaining <= 0 时返回完整周期秒数
+    - _Requirements: 20.1, 20.2, 20.3, 20.4, 20.5_
+  - [x] 18.2 在 JobManager 中添加 previewProduction(resourceManager) 方法
+    - 遍历所有有工匠的岗位，模拟一次 tick 的资源变化
+    - Baker wheat 限制与 calculateProduction 逻辑一致
+    - 累计 changes 确保多岗位间资源依赖正确
+    - 无工匠分配时返回空对象
+    - _Requirements: 21.2, 21.3, 21.7_
+  - [x] 18.3 在 CanvasRenderer 中添加 drawProductionCountdown(jobManager, now, offsetX) 方法
+    - 在工匠状态下方显示「下次产出: Ns」
+    - 淡蓝色(#aaaaff)
+    - _Requirements: 20.1, 20.4_
+  - [x] 18.4 在 CanvasRenderer 中添加 drawProductionPreview(jobManager, resourceManager, offsetX) 方法
+    - 在岗位列表下方显示资源变化预览
+    - 正数绿色(#00ff00)「+N 资源名」，负数红色(#ff4444)「-N 资源名」
+    - 零值不显示，无变化时不渲染
+    - _Requirements: 21.1, 21.4, 21.5, 21.6, 21.7_
+  - [x] 18.5 在 drawKingdomPage 中集成 drawProductionCountdown 和 drawProductionPreview 调用
+    - 在 drawCraftsmanStatus 之后调用 drawProductionCountdown
+    - 在 drawJobList 之后调用 drawProductionPreview
+    - _Requirements: 20.1, 21.1, 21.8_
+  - [ ]* 18.6 Property 29: 倒计时计算精度
+    - **Property 29: 倒计时计算精度**
+    - *For any* 有效的 now 和 lastTickTime，getRemainingSeconds 返回 Math.ceil((interval - elapsed) / 1000)
+    - **Validates: Requirements 20.4**
+  - [ ]* 18.7 Property 30: 产出预览与实际产出一致性
+    - **Property 30: 产出预览与实际产出一致性**
+    - *For any* 岗位分配和资源状态，previewProduction 的结果与实际执行一次产出的资源变化一致
+    - **Validates: Requirements 21.2, 21.3**
+  - [ ]* 18.8 单元测试：倒计时和产出预览边界情况
+    - lastTickTime=0 时倒计时返回完整周期
+    - 无工匠分配时 previewProduction 返回空对象
+    - Baker wheat=0 时 previewProduction 正确处理
+    - _Requirements: 20.2, 21.3, 21.7_
+
+- [ ] 19. Checkpoint - 倒计时和产出预览验证
+  - 确保所有测试通过，如有问题请告知。
 
 ## Notes
 
-- 标记 `*` 的任务为可选测试任务，可跳过以加快 MVP 进度
-- 核心逻辑在 `outside-logic.js` 中，便于 Node.js 环境下测试
-- `index.html` 通过 `<script src>` 引入配置和逻辑文件
-- 属性测试使用 fast-check 库，每个属性至少 100 次迭代
-- 单元测试和属性测试文件放在 `tests/` 目录下
-- 每个任务引用具体的需求编号以保证可追溯性
+- `*` 标记为可选测试任务
+- 核心逻辑在 outside-logic.js，测试通过 require 导入
+- 属性测试用 fast-check，≥100 次迭代
+- 测试文件在 tests/ 目录
+- Task 1-4, 10-11, 13-14 已完成
+- Toast 集成通过 index.html 方法包装实现
+- JobManager.update 前后对比资源差异触发 Toast
+- Task 18 为新增的倒计时和产出预览功能

@@ -21,7 +21,9 @@
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
+    <script src="resource-config.js"></script>
     <script src="outside-config.js"></script>
+    <script src="job-config.js"></script>
     <script src="outside-logic.js"></script>
     <script>
     // 加载外置配置，覆盖默认值
@@ -42,32 +44,104 @@
 
         var canvas = document.getElementById('gameCanvas');
 
-        // 恢复存档
+        // 初始化 JobManager 和 BuildingManager（从外置配置）
+        var jobConfig = (typeof JOB_CONFIG_EXTERNAL !== 'undefined') ? JOB_CONFIG_EXTERNAL : { jobs: {}, buildings: {} };
+        JobManager.init(jobConfig);
+        BuildingManager.init(jobConfig.buildings || {});
+
+        // 恢复存档（配置驱动）
         var saved = SaveSystem.load();
-        ResourceManager.gold = saved.gold;
-        ResourceManager.stone = saved.stone;
-        ResourceManager.wood = saved.wood;
+        var resCfg = (typeof RESOURCE_CONFIG_EXTERNAL !== 'undefined' && RESOURCE_CONFIG_EXTERNAL.resources)
+            ? RESOURCE_CONFIG_EXTERNAL.resources : {};
+        var resKeys = Object.keys(resCfg);
+        for (var i = 0; i < resKeys.length; i++) {
+            ResourceManager[resKeys[i]] = saved[resKeys[i]] || 0;
+        }
 
-        // 初始化渲染器和输入
+        // 恢复工匠容量
+        CraftsmanManager.totalCapacity = saved.craftsman ? saved.craftsman.totalCapacity : 0;
+
+        // 恢复岗位分配
+        if (saved.jobs) {
+            var jobIds = Object.keys(saved.jobs);
+            for (var i = 0; i < jobIds.length; i++) {
+                var jid = jobIds[i];
+                if (jid in JobManager.assignments) {
+                    JobManager.assignments[jid] = saved.jobs[jid];
+                }
+            }
+        }
+
+        // 恢复建筑数量
+        if (saved.buildings) {
+            var bIds = Object.keys(saved.buildings);
+            for (var i = 0; i < bIds.length; i++) {
+                var bid = bIds[i];
+                if (bid in BuildingManager.buildCounts) {
+                    BuildingManager.buildCounts[bid] = saved.buildings[bid];
+                }
+            }
+        }
+
+        // 初始化渲染器和输入（传入所有管理器）
         CanvasRenderer.init(canvas);
-        InputHandler.init(canvas, ButtonManager);
+        InputHandler.init(canvas, ButtonManager, PageManager, BuildingManager, JobManager, CraftsmanManager);
 
-        // 资源变化时自动存档 — 包装原始方法
-        var origAddGold = ResourceManager.addGold;
-        var origAddStone = ResourceManager.addStone;
-        var origAddWood = ResourceManager.addWood;
+        // 资源变化时自动存档 + 触发 Toast — 包装 addResource
+        var origAddResource = ResourceManager.addResource;
+        var origDeduct = ResourceManager.deduct;
 
-        ResourceManager.addGold = function(amount) {
-            origAddGold.call(ResourceManager, amount);
-            SaveSystem.save(ResourceManager.getResources());
+        function saveAll() {
+            SaveSystem.save(ResourceManager.getResources(), CraftsmanManager, JobManager.getAssignments(), BuildingManager.getBuildCounts());
+        }
+
+        function getCanvasSize() {
+            var c = document.getElementById('gameCanvas');
+            return { w: c.width, h: c.height };
+        }
+
+        ResourceManager.addResource = function(key, amount) {
+            origAddResource.call(ResourceManager, key, amount);
+            saveAll();
+            if (amount !== 0) {
+                var sz = getCanvasSize();
+                var name = RESOURCE_NAMES[key] || key;
+                ToastManager.addToast(amount > 0 ? 'gain' : 'consume', Math.abs(amount), name, sz.w, sz.h);
+            }
         };
-        ResourceManager.addStone = function(amount) {
-            origAddStone.call(ResourceManager, amount);
-            SaveSystem.save(ResourceManager.getResources());
+        ResourceManager.deduct = function(costs) {
+            origDeduct.call(ResourceManager, costs);
+            saveAll();
+            var sz = getCanvasSize();
+            var keys = Object.keys(costs);
+            for (var i = 0; i < keys.length; i++) {
+                var k = keys[i];
+                if (costs[k] !== 0) {
+                    ToastManager.addToast('consume', costs[k], RESOURCE_NAMES[k] || k, sz.w, sz.h);
+                }
+            }
         };
-        ResourceManager.addWood = function(amount) {
-            origAddWood.call(ResourceManager, amount);
-            SaveSystem.save(ResourceManager.getResources());
+
+        // 包装 JobManager.update：对比前后资源差异触发 Toast
+        var origJobUpdate = JobManager.update;
+        JobManager.update = function(now, resourceManager) {
+            var before = resourceManager.getResources();
+            origJobUpdate.call(JobManager, now, resourceManager);
+            var after = resourceManager.getResources();
+            var changes = {};
+            var resKeys = Object.keys(after);
+            for (var i = 0; i < resKeys.length; i++) {
+                var rk = resKeys[i];
+                var diff = after[rk] - (before[rk] || 0);
+                if (diff !== 0) {
+                    changes[rk] = diff;
+                }
+            }
+            if (Object.keys(changes).length > 0) {
+                var sz = getCanvasSize();
+                ToastManager.addResourceToasts(changes, sz.w, sz.h);
+                saveAll();
+            }
         };
 
         // 启动游戏循环
@@ -75,8 +149,18 @@
     }
 
     // 游戏主循环
+    var lastFrameTime = 0;
     function gameLoop(timestamp) {
-        CanvasRenderer.render(ResourceManager, ButtonManager, timestamp);
+        var deltaTime = lastFrameTime === 0 ? 0 : timestamp - lastFrameTime;
+        lastFrameTime = timestamp;
+
+        var canvas = document.getElementById('gameCanvas');
+        PageManager.updateAnimation(timestamp, canvas.width);
+        JobManager.update(timestamp, ResourceManager);
+        ToastManager.update(deltaTime);
+        CanvasRenderer.render(ResourceManager, ButtonManager, PageManager, timestamp,
+            CraftsmanManager, JobManager, BuildingManager);
+        ToastManager.render(CanvasRenderer.ctx);
         requestAnimationFrame(gameLoop);
     }
 

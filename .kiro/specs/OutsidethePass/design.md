@@ -2,319 +2,324 @@
 
 ## 概述
 
-关外经营系统是玩家在城堡外进行资源生产的核心界面。本阶段实现两个基础操作按钮：炼金（产金币）和收集（产石头和木头），配合冷却机制、资源显示和自动存档功能。
-
-技术方案遵循项目约定：单文件架构（index.html + script 标签），配置外置（外部 JS 文件），2D Canvas 渲染，localStorage 自动存档。
+关外经营系统：两个全屏页面（地下城堡/地下王国）拖拽切换，炼金产金币，收集产石头木头，工匠分配到农夫/面包工岗位自动产出，建造宿舍扩容。资源变化时显示 Toast 浮动提示（绿色增加/红色消耗），缓慢下降淡出。地下王国界面显示产出倒计时和资源变化预览。单文件架构 + 配置外置 + 2D Canvas + localStorage。
 
 ## 架构
 
-### 整体结构
-
 ```
-index.html          — 主文件，包含 Canvas 元素和所有核心逻辑
-outside-config.js   — 关外经营系统的外置配置（冷却时间、产出数量等）
-```
-
-### 模块划分（均在 index.html 的 script 标签内）
-
-```mermaid
-graph TD
-    A[Game Loop] --> B[InputHandler]
-    A --> C[Canvas_Renderer]
-    A --> D[ResourceManager]
-    B --> E[ButtonManager]
-    E --> D
-    D --> F[Save_System]
-    C --> D
-    C --> E
+index.html          — 主文件，Canvas + 核心逻辑
+outside-config.js   — 外置配置（冷却、产出、Canvas、页面切换、Toast）
+outside-logic.js    — 核心逻辑模块
+job-config.js       — 岗位和建筑外置配置
 ```
 
-- **Game Loop**: 游戏主循环，驱动更新和渲染
-- **InputHandler**: 处理 Canvas 上的鼠标点击事件，判断点击位置
-- **ButtonManager**: 管理按钮状态（可用/冷却中）、处理按钮点击逻辑
-- **ResourceManager**: 管理资源数据（Gold、Stone、Wood），处理资源增减
-- **Save_System**: 负责 localStorage 的读写
-- **Canvas_Renderer**: 在 Canvas 上绘制按钮、资源显示、冷却倒计时
+模块：Game Loop → PageManager / InputHandler / Canvas_Renderer / ResourceManager / JobManager / ToastManager
+InputHandler → PageManager / ButtonManager / BuildingManager / JobManager
+ResourceManager → Save_System / ToastManager
+JobManager → ResourceManager / CraftsmanManager
+BuildingManager → ResourceManager / CraftsmanManager
 
-## 组件与接口
+## 组件接口
 
-### outside-config.js（外置配置）
-
+### outside-config.js
 ```javascript
-// outside-config.js
 var OUTSIDE_CONFIG_EXTERNAL = {
-    alchemy: {
-        cooldown: 5000,       // 炼金冷却时间（毫秒）
-        goldAmount: 1         // 每次产生的金币数量
+    alchemy: { cooldown: 5000, goldAmount: 1 },
+    collect: { cooldown: 10000, stoneMin: 3, stoneMax: 6, woodMin: 3, woodMax: 6 },
+    canvas: { width: 800, height: 600 },
+    pages: { swipeThreshold: 0.3, animationDuration: 300 },
+    toast: { speed: 30, duration: 2000, fontSize: 20, spacing: 28 }
+};
+```
+
+### job-config.js
+```javascript
+var JOB_CONFIG_EXTERNAL = {
+    productionInterval: 15000,
+    jobs: {
+        farmer: { name: '农夫', consumes: {}, produces: { wheat: 2 } },
+        baker: { name: '面包工', consumes: { wheat: 2 }, produces: { bread: 1 } }
     },
-    collect: {
-        cooldown: 10000,      // 收集冷却时间（毫秒）
-        stoneMin: 3,          // 石头最小产出
-        stoneMax: 6,          // 石头最大产出
-        woodMin: 3,           // 木头最小产出
-        woodMax: 6            // 木头最大产出
-    },
-    canvas: {
-        width: 800,
-        height: 600
+    buildings: {
+        dormitory: { name: '宿舍', cost: { wood: 10, stone: 10 }, effect: { craftsmanCapacity: 2 } }
     }
 };
 ```
 
 ### ResourceManager
-
-```javascript
-// 资源管理器
-var ResourceManager = {
-    gold: 0,
-    stone: 0,
-    wood: 0,
-
-    addGold: function(amount) { /* 增加金币，触发存档 */ },
-    addStone: function(amount) { /* 增加石头，触发存档 */ },
-    addWood: function(amount) { /* 增加木头，触发存档 */ },
-    getResources: function() { /* 返回 {gold, stone, wood} */ }
-};
-```
+属性：gold, stone, wood, wheat, bread（均初始0）
+方法：addGold/addStone/addWood/addWheat/addBread(amount), hasEnough(costs), deduct(costs), getResources()
 
 ### ButtonManager
+每个按钮：{ x, y, width, height, cooldownEnd, onClick }
+方法：isInCooldown(name, now), getRemainingCooldown(name, now), handleClick(x, y), isPointInButton(x, y, button)
 
-```javascript
-// 按钮管理器
-var ButtonManager = {
-    buttons: {
-        alchemy: {
-            x: 0, y: 0, width: 0, height: 0,  // 位置和尺寸
-            cooldownEnd: 0,                      // 冷却结束时间戳
-            onClick: function() { /* 炼金逻辑 */ }
-        },
-        collect: {
-            x: 0, y: 0, width: 0, height: 0,
-            cooldownEnd: 0,
-            onClick: function() { /* 收集逻辑 */ }
-        }
-    },
+### SaveSystem
+STORAGE_KEY: 'underground_castle_outside'
+方法：save(resources, craftsman, jobs, buildings), load()（失败返回默认值）
 
-    isInCooldown: function(buttonName, now) { /* 判断是否在冷却中 */ },
-    getRemainingCooldown: function(buttonName, now) { /* 获取剩余冷却秒数 */ },
-    handleClick: function(x, y) { /* 判断点击了哪个按钮并执行 */ },
-    isPointInButton: function(x, y, button) { /* 点击命中检测 */ }
-};
-```
+### PageManager
+状态：currentPage(0/1), offsetX, isDragging, isAnimating, dragStartX, 动画相关字段
+方法：getTargetOffset(pageIndex, canvasWidth), startDrag(x), updateDrag(x, canvasWidth), endDrag(canvasWidth), updateAnimation(now, canvasWidth), shouldSwitchPage(dragDistance, canvasWidth)
 
-### Save_System
+### CanvasRenderer
+方法：init(canvas), render(...), drawCastlePage/drawKingdomPage(offsetX, ...), drawPageTitle(title, offsetX), drawButton/drawResources/drawCooldown(...), drawProductionCountdown(jobManager, now, offsetX), drawProductionPreview(jobManager, resourceManager, offsetX)
 
-```javascript
-// 存档系统
-var SaveSystem = {
-    STORAGE_KEY: 'underground_castle_outside',
+#### drawProductionCountdown(jobManager, now, offsetX)
+在工匠状态下方显示「下次产出: Ns」。
+- 调用 jobManager.getRemainingSeconds(now) 获取剩余秒数
+- 位置：工匠状态行下方（y ≈ 380）
+- 颜色：#aaaaff（淡蓝色）
 
-    save: function(resources) { /* JSON.stringify 写入 localStorage */ },
-    load: function() { /* 从 localStorage 读取并 JSON.parse，失败返回默认值 */ }
-};
-```
-
-### Canvas_Renderer
-
-```javascript
-// Canvas 渲染器
-var CanvasRenderer = {
-    ctx: null,  // Canvas 2D context
-
-    init: function(canvas) { /* 初始化 context */ },
-    render: function(resourceManager, buttonManager, now) { /* 主渲染方法 */ },
-    drawButton: function(button, label, now) { /* 绘制单个按钮 */ },
-    drawResources: function(resources) { /* 绘制资源显示 */ },
-    drawCooldown: function(button, now) { /* 绘制冷却倒计时覆盖层 */ }
-};
-```
+#### drawProductionPreview(jobManager, resourceManager, offsetX)
+在岗位列表下方显示资源变化预览。
+- 调用 jobManager.previewProduction(resourceManager) 获取变化量
+- 无变化时不渲染
+- 标题行「下次产出预览:」白色
+- 正数：绿色(#00ff00)「+N 资源名」
+- 负数：红色(#ff4444)「-N 资源名」
+- 零值资源不显示
 
 ### InputHandler
+init(canvas, buttonManager, pageManager)：绑定 mouse/touch 事件，区分拖拽（>5px）和点击，点击只响应当前页面按钮
 
+### CraftsmanManager
+属性：totalCapacity
+方法：getAssigned()（从JobManager汇总）, getAvailable(), addCapacity(amount), canAssign()
+
+### JobManager
+属性：assignments({ farmer: 0, baker: 0 }), lastTickTime
+方法：init(jobConfig), assign(jobId), unassign(jobId), update(now, resourceManager), calculateProduction(jobId, workerCount, resourceManager), getAssignments(), getRemainingSeconds(now), previewProduction(resourceManager)
+
+#### getRemainingSeconds(now)
+计算距离下次 Production_Tick 的剩余秒数。
 ```javascript
-// 输入处理器
-var InputHandler = {
-    init: function(canvas, buttonManager) {
-        canvas.addEventListener('click', function(e) {
-            var rect = canvas.getBoundingClientRect();
-            var x = e.clientX - rect.left;
-            var y = e.clientY - rect.top;
-            buttonManager.handleClick(x, y);
-        });
+getRemainingSeconds: function(now) {
+    var interval = (this._config && this._config.productionInterval) || 15000;
+    if (this.lastTickTime === 0) {
+        return Math.ceil(interval / 1000);
     }
-};
+    var elapsed = now - this.lastTickTime;
+    var remaining = interval - elapsed;
+    if (remaining <= 0) return Math.ceil(interval / 1000);
+    return Math.ceil(remaining / 1000);
+}
 ```
+- lastTickTime=0（首次启动）→ 返回完整周期秒数
+- tick 刚触发后 → remaining ≈ interval → 返回完整周期秒数
+- 精度：向上取整（Math.ceil）
+
+#### previewProduction(resourceManager)
+预计算下次 tick 的资源变化量，返回 { resourceKey: delta } 对象。
+```javascript
+previewProduction: function(resourceManager) {
+    var changes = {};
+    if (!this._config || !this._config.jobs) return changes;
+    var jobIds = Object.keys(this.assignments);
+    for (var i = 0; i < jobIds.length; i++) {
+        var jobId = jobIds[i];
+        var workerCount = this.assignments[jobId];
+        if (workerCount <= 0) continue;
+        var jobDef = this._config.jobs[jobId];
+        if (!jobDef) continue;
+        var consumes = jobDef.consumes || {};
+        var produces = jobDef.produces || {};
+        // 计算实际可工作的工匠数（考虑资源限制）
+        var actualWorkers = workerCount;
+        var consumeKeys = Object.keys(consumes);
+        // 用当前资源 + 已累计的 changes 来计算可用量
+        for (var c = 0; c < consumeKeys.length; c++) {
+            var resKey = consumeKeys[c];
+            var costPerWorker = consumes[resKey];
+            if (costPerWorker > 0) {
+                var available = (resourceManager[resKey] || 0) + (changes[resKey] || 0);
+                var maxWorkers = Math.floor(available / costPerWorker);
+                if (maxWorkers < actualWorkers) actualWorkers = maxWorkers;
+            }
+        }
+        if (actualWorkers <= 0) continue;
+        // 累计消耗
+        for (var c = 0; c < consumeKeys.length; c++) {
+            var resKey = consumeKeys[c];
+            changes[resKey] = (changes[resKey] || 0) - consumes[resKey] * actualWorkers;
+        }
+        // 累计产出
+        var produceKeys = Object.keys(produces);
+        for (var p = 0; p < produceKeys.length; p++) {
+            var resKey = produceKeys[p];
+            changes[resKey] = (changes[resKey] || 0) + produces[resKey] * actualWorkers;
+        }
+    }
+    return changes;
+}
+```
+- 遍历所有有工匠的岗位，模拟一次 tick 的资源变化
+- Baker 的 wheat 限制与 calculateProduction 逻辑一致
+- 累计 changes 确保多岗位间资源依赖正确（如 farmer 产出的 wheat 可供 baker 消耗）
+- 返回值只包含非零变化的资源
+
+### BuildingManager
+属性：buildCounts({ dormitory: 0 }), button位置
+方法：init(buildingConfig), canBuild(id, resourceManager), build(id, resourceManager, craftsmanManager), getBuildCounts()
+
+### ToastManager
+```javascript
+var RESOURCE_NAMES = { gold: '金币', stone: '石头', wood: '木头', wheat: '小麦', bread: '面包' };
+```
+属性：toasts[], _defaults: { speed: 30, duration: 2000, fontSize: 20, spacing: 28 }
+方法：getConfig(), addToast(type, amount, resourceName, canvasWidth, canvasHeight), addResourceToasts(changes, canvasWidth, canvasHeight), update(deltaTime), render(ctx)
+
+Toast 数据结构：{ text, color, x, startY, y, opacity, elapsed }
+- gain: 绿色(#00ff00) "+N 资源名", consume: 红色(#ff4444) "-N 资源名"
+- 初始位置：Canvas 中心，多条向下堆叠（spacing 间距）
+- 每帧：y = startY + speed * elapsed / 1000, opacity = max(0, 1 - elapsed / duration)
+
+### 集成方式
+- ResourceManager 的 add/deduct 方法在 index.html 中包装，自动触发 Toast 和存档
+- JobManager.update 前后对比资源差异，差异不为零时触发 Toast
 
 ### Game Loop
-
 ```javascript
-// 游戏主循环
+var lastFrameTime = 0;
 function gameLoop(timestamp) {
-    CanvasRenderer.render(ResourceManager, ButtonManager, timestamp);
+    var deltaTime = lastFrameTime === 0 ? 0 : timestamp - lastFrameTime;
+    lastFrameTime = timestamp;
+    PageManager.updateAnimation(timestamp, canvas.width);
+    JobManager.update(timestamp, ResourceManager);
+    ToastManager.update(deltaTime);
+    CanvasRenderer.render(...);
+    ToastManager.render(CanvasRenderer.ctx);
     requestAnimationFrame(gameLoop);
 }
 ```
 
 ## 数据模型
 
-### 资源数据
-
-```javascript
-// 运行时资源状态
-{
-    gold: Number,   // 金币总量，非负整数
-    stone: Number,  // 石头总量，非负整数
-    wood: Number    // 木头总量，非负整数
-}
-```
-
-### 按钮状态
-
-```javascript
-// 按钮运行时状态
-{
-    x: Number,            // 按钮左上角 X 坐标
-    y: Number,            // 按钮左上角 Y 坐标
-    width: Number,        // 按钮宽度
-    height: Number,       // 按钮高度
-    cooldownEnd: Number,  // 冷却结束的时间戳（毫秒），0 表示无冷却
-    onClick: Function     // 点击回调
-}
-```
-
 ### localStorage 存档格式
-
-```javascript
-// localStorage 中存储的 JSON 字符串
-{
-    "gold": 0,
-    "stone": 0,
-    "wood": 0
-}
+```json
+{ "gold": 0, "stone": 0, "wood": 0, "wheat": 0, "bread": 0,
+  "craftsman": { "totalCapacity": 0 },
+  "jobs": { "farmer": 0, "baker": 0 },
+  "buildings": { "dormitory": 0 } }
 ```
 
-### 随机数生成
+### 页面定义
+- 页面 0 (Castle_Page): 标题"地下城堡", Alchemy_Button, 偏移 offsetX
+- 页面 1 (Kingdom_Page): 标题"地下王国", Collect_Button, 偏移 offsetX + canvasWidth, Production_Countdown, Production_Preview
 
-收集按钮的资源产出使用均匀随机：
-
+### randomInt(min, max)
 ```javascript
-// 生成 [min, max] 范围内的随机整数
-function randomInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
+Math.floor(Math.random() * (max - min + 1)) + min
 ```
 
-
-## 正确性属性（Correctness Properties）
-
-*属性（Property）是系统在所有合法执行中都应保持为真的特征或行为——本质上是对系统应做什么的形式化陈述。属性是人类可读规格说明与机器可验证正确性保证之间的桥梁。*
-
-以下属性基于需求文档中的验收标准，经过合并去重后得出。
+## 正确性属性
 
 ### Property 1: 炼金按钮产出正确性
-
-*For any* 资源状态和时间戳，当玩家点击 Alchemy_Button 时：若按钮不在 Cooldown 中，Gold 总量应恰好增加 1；若按钮在 Cooldown 中，Gold 总量应保持不变。
-
-**Validates: Requirements 1.1, 1.5**
+非冷却点击 Gold +1，冷却中不变。 **Validates: 1.1, 1.5**
 
 ### Property 2: 收集按钮产出范围正确性
-
-*For any* 资源状态和时间戳，当玩家点击 Collect_Button 时：若按钮不在 Cooldown 中，Stone 增量应在 [3, 6] 范围内且 Wood 增量应在 [3, 6] 范围内；若按钮在 Cooldown 中，Stone 和 Wood 总量应保持不变。
-
-**Validates: Requirements 2.1, 2.2, 2.6**
+非冷却点击 Stone/Wood 增量 ∈ [3,6]，冷却中不变。 **Validates: 2.1, 2.2, 2.6**
 
 ### Property 3: 冷却时间计算正确性
-
-*For any* 按钮和成功点击后的任意时间戳 t，若 t 在点击时刻后的配置冷却时长内，则 isInCooldown 应返回 true 且 getRemainingCooldown 应返回正确的剩余秒数（向上取整）；若 t 超过冷却时长，则 isInCooldown 应返回 false。
-
-**Validates: Requirements 1.3, 1.4, 2.4, 2.5**
+点击后配置时长内 isInCooldown=true 且 getRemainingCooldown 正确，超时后 false。 **Validates: 1.3, 1.4, 2.4, 2.5**
 
 ### Property 4: 资源显示一致性
+渲染输出包含 gold/stone/wood 当前值。 **Validates: 1.2, 2.3, 3.1, 3.2**
 
-*For any* 资源状态 {gold, stone, wood}，渲染输出应包含这三个资源的当前数值。
-
-**Validates: Requirements 1.2, 2.3, 3.1, 3.2**
-
-### Property 5: 存档读写往返一致性（Round Trip）
-
-*For any* 合法的资源状态 {gold, stone, wood}（非负整数），执行 save 后再执行 load 应返回与原始状态等价的资源数据。
-
-**Validates: Requirements 4.1, 4.2**
+### Property 5: 存档读写往返一致性
+save → load 返回等价数据。 **Validates: 4.1, 4.2**
 
 ### Property 6: 点击命中检测正确性
+isPointInButton 返回 true ⟺ 点在矩形内。 **Validates: 5.3**
 
-*For any* 按钮的矩形区域 {x, y, width, height} 和任意点击坐标 (px, py)，isPointInButton 返回 true 当且仅当 px 在 [x, x+width] 范围内且 py 在 [y, y+height] 范围内。
+### Property 7: 页面切换往返一致性
+page0 → page1 → page0，currentPage 回到 0。 **Validates: 6.4, 6.5**
 
-**Validates: Requirements 5.3**
+### Property 8: 拖拽跟随正确性
+updateDrag 后 offsetX 变化量 = 拖拽位移（受边界限制）。 **Validates: 6.6**
+
+### Property 9: 页面切换阈值判断正确性
+shouldSwitchPage = true ⟺ |dragDistance| >= canvasWidth * 0.3。 **Validates: 6.7, 6.8**
+
+### Property 10: 动画期间拖拽锁定
+isAnimating=true 时 startDrag 后 isDragging 保持 false。 **Validates: 6.9**
+
+### Property 11: 页面偏移量边界约束
+offsetX ∈ [-(pageCount-1)*canvasWidth, 0]。 **Validates: 6.10, 6.11**
+
+### Property 12: 配置驱动初始化正确性
+init 后 assignments/buildCounts 包含所有配置 key 且值为 0。 **Validates: 7.2, 7.3, 7.4**
+
+### Property 13: 扩展存档往返一致性
+含所有字段的 save → load 往返一致。 **Validates: 8.4, 8.5, 9.6, 9.7, 13.2**
+
+### Property 14: 工匠不变量
+available = totalCapacity - assigned，assigned = 所有岗位分配数之和。 **Validates: 9.1, 9.3, 9.4, 12.3, 12.4**
+
+### Property 15: 工匠分配拒绝
+available=0 时 assign 失败，状态不变。 **Validates: 9.5**
+
+### Property 16: 产出时机正确性
+仅在 now - lastTickTime >= productionInterval 时执行产出。 **Validates: 10.1**
+
+### Property 17: Farmer 产出正确性
+n 个 farmer → wheat += 2*n。 **Validates: 10.2**
+
+### Property 18: Baker 产出正确性
+n 个 baker, wheat=w → 实际处理 min(n, floor(w/2))，wheat -= 实际*2，bread += 实际。 **Validates: 10.3, 10.4**
+
+### Property 19: 建造正确性
+资源够：扣除 cost，容量 += effect；不够：状态不变。 **Validates: 11.3, 11.4, 11.5**
+
+### Property 20: 资源显示包含新资源
+渲染输出包含五种资源值。 **Validates: 8.2, 8.3**
+
+### Property 21: 资源变化触发 Toast 创建
+Toast 数量 = 非零变化的资源种类数。 **Validates: 14.1, 14.3, 15.1, 15.3**
+
+### Property 22: Toast 文字格式与颜色正确性
+gain: "+N name" 绿色, consume: "-N name" 红色。 **Validates: 14.2, 15.2**
+
+### Property 23: Toast 初始位置正确性
+无活跃 Toast 时新 Toast 位于 Canvas 中心。 **Validates: 16.1**
+
+### Property 24: Toast 堆叠排列正确性
+新 Toast.startY = 上一条.startY + spacing。 **Validates: 16.2, 16.3**
+
+### Property 25: Toast 下降位移正确性
+y = startY + speed * elapsed / 1000。 **Validates: 17.1**
+
+### Property 26: Toast 透明度生命周期正确性
+opacity = max(0, 1 - elapsed / duration)。 **Validates: 17.2, 17.4**
+
+### Property 27: Toast 过期移除
+opacity ≤ 0 的 Toast 被移除。 **Validates: 17.3**
+
+### Property 28: Toast 配置驱动
+使用外部配置值而非默认值。 **Validates: 19.1**
+
+### Property 29: 倒计时计算精度
+*For any* 有效的 now 和 lastTickTime（lastTickTime > 0 且 now - lastTickTime < productionInterval），getRemainingSeconds(now) 应等于 Math.ceil((productionInterval - (now - lastTickTime)) / 1000)。 **Validates: 20.4**
+
+### Property 30: 产出预览与实际产出一致性
+*For any* 岗位分配组合和资源状态，previewProduction 返回的资源变化量应与对相同状态执行一次 calculateProduction（遍历所有岗位）后的实际资源变化量一致。 **Validates: 21.2, 21.3**
 
 ## 错误处理
 
-### localStorage 异常
-
-- **数据缺失**：localStorage 中无存档 key 时，Save_System.load() 返回 `{gold: 0, stone: 0, wood: 0}`
-- **数据损坏**：JSON.parse 失败时，捕获异常并返回默认值 `{gold: 0, stone: 0, wood: 0}`
-- **字段缺失**：解析成功但缺少某个字段时，缺失字段默认为 0
-- **存储已满**：localStorage.setItem 抛出 QuotaExceededError 时，捕获异常，游戏继续运行但不保存
-
-### Canvas 点击异常
-
-- 点击坐标超出所有按钮区域时，不执行任何操作
-- 多个按钮区域重叠时（当前设计不会出现），优先响应第一个匹配的按钮
-
-### 资源数值边界
-
-- 资源总量始终为非负整数
-- 不设上限（后续可通过配置添加）
+- localStorage：缺失/损坏/字段缺失 → 默认值；旧存档兼容；存储满时捕获异常继续运行
+- 点击：超出按钮区域无操作；拖拽 <5px 视为点击
+- 页面切换：边界钳制 offsetX；动画中忽略新拖拽
+- 资源：非负整数，无上限；Baker wheat 不足按 floor(wheat/2) 处理；建造/分配资源不足时拒绝
+- 岗位移除：分配数=0 时不执行
+- 配置：Job_Config 未加载用空默认；缺少 consumes/produces 默认空对象
+- Toast：配置缺失用默认值；变化量=0 不创建；不设上限
 
 ## 测试策略
 
-### 属性测试（Property-Based Testing）
+使用 fast-check 属性测试（每属性 ≥100 次）+ 单元测试。
+测试文件：`tests/outside-castle.property.test.js` 和 `tests/outside-castle.unit.test.js`
+核心逻辑在 `outside-logic.js`，测试通过 require 导入。
 
-使用 [fast-check](https://github.com/dubzzz/fast-check) 库进行属性测试，每个属性至少运行 100 次迭代。
-
-测试文件：`tests/outside-castle.property.test.js`
-
-需要测试的属性：
-
-1. **Feature: OutsidethePass, Property 1: 炼金按钮产出正确性**
-   - 生成随机初始 gold 值和随机时间戳
-   - 验证非冷却状态下 gold +1，冷却状态下 gold 不变
-
-2. **Feature: OutsidethePass, Property 2: 收集按钮产出范围正确性**
-   - 生成随机初始 stone/wood 值和随机时间戳
-   - 验证非冷却状态下增量在 [3,6]，冷却状态下不变
-
-3. **Feature: OutsidethePass, Property 3: 冷却时间计算正确性**
-   - 生成随机点击时间和查询时间
-   - 验证 isInCooldown 和 getRemainingCooldown 的返回值
-
-4. **Feature: OutsidethePass, Property 4: 资源显示一致性**
-   - 生成随机资源状态
-   - 验证渲染输出包含所有资源数值
-
-5. **Feature: OutsidethePass, Property 5: 存档读写往返一致性**
-   - 生成随机合法资源状态
-   - 验证 save → load 往返一致
-
-6. **Feature: OutsidethePass, Property 6: 点击命中检测正确性**
-   - 生成随机矩形和随机点击坐标
-   - 验证 isPointInButton 的几何正确性
-
-### 单元测试
-
-测试文件：`tests/outside-castle.unit.test.js`
-
-覆盖边界情况和具体示例：
-
-- localStorage 数据缺失时加载返回默认值（需求 4.3 边界情况）
-- localStorage 数据损坏（非法 JSON）时加载返回默认值（需求 4.3 边界情况）
-- localStorage 字段缺失时缺失字段默认为 0
-- 炼金按钮冷却恰好到期时可再次点击
-- 收集按钮冷却恰好到期时可再次点击
-
-### 测试框架
-
-- 测试运行器：使用 Node.js 环境 + Jest 或 Vitest
-- 属性测试库：fast-check
-- 由于核心逻辑在 index.html 的 script 标签中，测试时需要将可测试的纯逻辑函数提取为可导入的模块（如 `outside-logic.js`），或在测试中直接 eval/加载脚本
-- 推荐方案：将核心逻辑（ResourceManager、ButtonManager、SaveSystem、randomInt、isPointInButton）放在 `outside-logic.js` 中，index.html 通过 `<script src>` 引入，测试文件通过 `require` 导入
+新增属性测试：
+- Property 29: 倒计时计算精度 — 验证 getRemainingSeconds 的数学正确性
+- Property 30: 产出预览一致性 — 验证 previewProduction 与实际产出逻辑一致
