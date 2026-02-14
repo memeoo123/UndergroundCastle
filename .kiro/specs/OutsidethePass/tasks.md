@@ -141,3 +141,36 @@
 - Toast 集成通过 index.html 方法包装实现
 - JobManager.update 前后对比资源差异触发 Toast
 - Task 18 为新增的倒计时和产出预览功能
+
+
+- [x] 20. 实现滚动视图和仓库显示
+  - [x] 20.1 PageManager 添加 castleScrollOffset 和 kingdomScrollOffset 状态，初始化为 0 _Req: 22.2, 23.2_
+  - [x] 20.2 PageManager 添加 handleScroll(page, delta) 方法，更新对应页面的 scrollOffset _Req: 22.4, 23.3_
+  - [x] 20.3 CanvasRenderer 添加 drawWarehouse(resources, scrollOffset, offsetX) 方法 _Req: 22.1, 22.2_
+    - 绘制"仓库"标题
+    - 定义滚动区域（x, y, width, height）
+    - 根据 scrollOffset 裁剪并绘制资源列表
+    - 绘制滚动条
+  - [x] 20.4 CanvasRenderer 添加 drawJobScrollView(jobManager, craftsmanManager, scrollOffset, offsetX) 方法 _Req: 23.2_
+    - 定义滚动区域
+    - 根据 scrollOffset 裁剪并绘制工匠状态、岗位列表、产出倒计时、产出预览
+    - 绘制滚动条
+  - [x] 20.5 修改 drawCastlePage，调整布局避免重叠，集成 drawWarehouse _Req: 22.3_
+    - 炼金按钮位置：左上角
+    - 建造按钮位置：炼金按钮右侧
+    - 仓库区域：按钮下方，占据大部分空间
+  - [x] 20.6 修改 drawKingdomPage，移除资源显示，集成 drawJobScrollView _Req: 23.1, 23.5_
+    - 收集按钮位置：左上角
+    - 滚动区域：按钮下方，占据大部分空间
+  - [x] 20.7 InputHandler 添加鼠标滚轮事件处理 _Req: 22.4, 23.3_
+    - 监听 wheel 事件
+    - 根据当前页面调用 PageManager.handleScroll
+    - 阻止默认滚动行为
+  - [x] 20.8 InputHandler 添加触摸拖拽滚动支持 _Req: 22.4, 23.3_
+    - 区分页面拖拽和滚动区域拖拽
+    - 滚动区域内的垂直拖拽触发滚动
+    - 水平拖拽仍触发页面切换
+
+- [ ] 21. Checkpoint - UI 优化验证
+  - 手动测试地下城堡界面：仓库显示完整、滚动流畅、按钮不重叠
+  - 手动测试地下王国界面：岗位列表滚动流畅、无仓库显示

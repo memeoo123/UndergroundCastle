@@ -59,11 +59,11 @@ STORAGE_KEY: 'underground_castle_outside'
 方法：save(resources, craftsman, jobs, buildings), load()（失败返回默认值）
 
 ### PageManager
-状态：currentPage(0/1), offsetX, isDragging, isAnimating, dragStartX, 动画相关字段
-方法：getTargetOffset(pageIndex, canvasWidth), startDrag(x), updateDrag(x, canvasWidth), endDrag(canvasWidth), updateAnimation(now, canvasWidth), shouldSwitchPage(dragDistance, canvasWidth)
+状态：currentPage(0/1), offsetX, isDragging, isAnimating, dragStartX, 动画相关字段, castleScrollOffset, kingdomScrollOffset
+方法：getTargetOffset(pageIndex, canvasWidth), startDrag(x), updateDrag(x, canvasWidth), endDrag(canvasWidth), updateAnimation(now, canvasWidth), shouldSwitchPage(dragDistance, canvasWidth), handleScroll(page, delta)
 
 ### CanvasRenderer
-方法：init(canvas), render(...), drawCastlePage/drawKingdomPage(offsetX, ...), drawPageTitle(title, offsetX), drawButton/drawResources/drawCooldown(...), drawProductionCountdown(jobManager, now, offsetX), drawProductionPreview(jobManager, resourceManager, offsetX)
+方法：init(canvas), render(...), drawCastlePage/drawKingdomPage(offsetX, ...), drawPageTitle(title, offsetX), drawButton/drawResources/drawCooldown(...), drawProductionCountdown(jobManager, now, offsetX), drawProductionPreview(jobManager, resourceManager, offsetX), drawWarehouse(resources, scrollOffset, offsetX), drawJobScrollView(jobManager, craftsmanManager, scrollOffset, offsetX)
 
 #### drawProductionCountdown(jobManager, now, offsetX)
 在工匠状态下方显示「下次产出: Ns」。
@@ -79,6 +79,21 @@ STORAGE_KEY: 'underground_castle_outside'
 - 正数：绿色(#00ff00)「+N 资源名」
 - 负数：红色(#ff4444)「-N 资源名」
 - 零值资源不显示
+
+#### drawWarehouse(resources, scrollOffset, offsetX)
+在地下城堡界面显示仓库资源总览（带滚动）。
+- 标题「仓库」，白色粗体
+- 滚动区域：固定高度（如400px），显示所有资源
+- scrollOffset 控制滚动位置
+- 每行显示：资源名 + 数量
+- 滚动条：右侧显示当前位置
+
+#### drawJobScrollView(jobManager, craftsmanManager, scrollOffset, offsetX)
+在地下王国界面显示岗位列表（带滚动）。
+- 滚动区域：固定高度，显示所有岗位
+- scrollOffset 控制滚动位置
+- 包含工匠状态、岗位列表、+/- 按钮
+- 滚动条：右侧显示当前位置
 
 ### InputHandler
 init(canvas, buttonManager, pageManager)：绑定 mouse/touch 事件，区分拖拽（>5px）和点击，点击只响应当前页面按钮

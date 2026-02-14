@@ -62,6 +62,26 @@ var JOB_CONFIG_EXTERNAL = {
             name: '暗钢工匠',
             consumes: { steel: 10 },
             produces: { darksteel: 1 }
+        },
+        magicPowdersmith: {
+            name: '魔粉工匠',
+            consumes: { crystal: 100 },
+            produces: { magicPowder: 1 }
+        },
+        spiritWoodsmith: {
+            name: '灵木工匠',
+            consumes: { wood: 900, magicPowder: 1 },
+            produces: { spiritWood: 1 }
+        },
+        clothWorker: {
+            name: '布料工',
+            consumes: { bread: 1 },
+            produces: { cloth: 1 }
+        },
+        silkWorker: {
+            name: '丝绸工匠',
+            consumes: { cloth: 15 },
+            produces: { silk: 1 }
         }
     },
 

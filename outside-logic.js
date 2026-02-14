@@ -216,6 +216,7 @@ var InputHandler = {
         var startX = 0;
         var startY = 0;
         var isDown = false;
+        var dragMode = null; // null, 'page', 'scroll'
 
         function getPos(e) {
             var rect = canvas.getBoundingClientRect();
@@ -233,12 +234,25 @@ var InputHandler = {
                    py >= rect.y && py <= rect.y + rect.height;
         }
 
+        function isInScrollArea(x, y, page) {
+            // 检查是否在滚动区域内
+            if (page === 0) {
+                // Castle page: 仓库滚动区域（右侧）
+                return y >= 110 && y <= 580 && x >= 280 && x <= 780;
+            } else if (page === 1) {
+                // Kingdom page: 岗位滚动区域（右侧）
+                return y >= 80 && y <= 580 && x >= 320 && x <= 780;
+            }
+            return false;
+        }
+
         function onDown(e) {
             e.preventDefault();
             var pos = getPos(e);
             startX = pos.x;
             startY = pos.y;
             isDown = true;
+            dragMode = null;
             if (pageManager) {
                 pageManager.startDrag(pos.x);
             }
@@ -248,8 +262,33 @@ var InputHandler = {
             if (!isDown) return;
             e.preventDefault();
             var pos = getPos(e);
-            if (pageManager && pageManager.isDragging) {
+            var dx = pos.x - startX;
+            var dy = pos.y - startY;
+            var dist = Math.sqrt(dx * dx + dy * dy);
+
+            // 确定拖拽模式
+            if (dragMode === null && dist > self._DRAG_THRESHOLD) {
+                var page = pageManager ? pageManager.currentPage : 0;
+                var inScrollArea = isInScrollArea(startX, startY, page);
+                
+                if (inScrollArea && Math.abs(dy) > Math.abs(dx)) {
+                    // 垂直拖拽且在滚动区域内 -> 滚动模式
+                    dragMode = 'scroll';
+                    if (pageManager) {
+                        pageManager.isDragging = false;
+                    }
+                } else {
+                    // 水平拖拽或不在滚动区域 -> 页面切换模式
+                    dragMode = 'page';
+                }
+            }
+
+            if (dragMode === 'page' && pageManager && pageManager.isDragging) {
                 pageManager.updateDrag(pos.x, canvas.width);
+            } else if (dragMode === 'scroll' && pageManager) {
+                var scrollDelta = pos.y - startY;
+                pageManager.handleScroll(pageManager.currentPage, -scrollDelta);
+                startY = pos.y; // 更新起始点以实现连续滚动
             }
         }
 
@@ -274,6 +313,7 @@ var InputHandler = {
                             if (!buttonManager.isInCooldown('alchemy', now)) {
                                 alchemy.onClick(now);
                             }
+                            dragMode = null;
                             return;
                         }
 
@@ -282,6 +322,7 @@ var InputHandler = {
                             var btn = buildingManager.button;
                             if (isPointInRect(pos.x, pos.y, btn)) {
                                 buildingManager.build('dormitory', ResourceManager, craftsmanManager);
+                                dragMode = null;
                                 return;
                             }
                         }
@@ -292,6 +333,7 @@ var InputHandler = {
                             if (!buttonManager.isInCooldown('collect', now)) {
                                 collect.onClick(now);
                             }
+                            dragMode = null;
                             return;
                         }
 
@@ -303,10 +345,12 @@ var InputHandler = {
                                 var btns = jobManager._uiButtons[jobId];
                                 if (btns.plus && isPointInRect(pos.x, pos.y, btns.plus)) {
                                     jobManager.assign(jobId);
+                                    dragMode = null;
                                     return;
                                 }
                                 if (btns.minus && isPointInRect(pos.x, pos.y, btns.minus)) {
                                     jobManager.unassign(jobId);
+                                    dragMode = null;
                                     return;
                                 }
                             }
@@ -317,10 +361,13 @@ var InputHandler = {
                 }
             } else {
                 // 视为拖拽
-                if (pageManager) {
+                if (dragMode === 'page' && pageManager) {
                     pageManager.endDrag(canvas.width);
                 }
+                // 滚动模式不需要特殊处理
             }
+            
+            dragMode = null;
         }
 
         // Mouse events
@@ -332,6 +379,15 @@ var InputHandler = {
         canvas.addEventListener('touchstart', onDown, { passive: false });
         canvas.addEventListener('touchmove', onMove, { passive: false });
         canvas.addEventListener('touchend', onUp, { passive: false });
+
+        // Wheel event for scrolling
+        canvas.addEventListener('wheel', function(e) {
+            e.preventDefault();
+            if (pageManager) {
+                var delta = e.deltaY * 0.5; // 调整滚动速度
+                pageManager.handleScroll(pageManager.currentPage, delta);
+            }
+        }, { passive: false });
     }
 };
 
@@ -361,34 +417,102 @@ var CanvasRenderer = {
         ctx.clip();
 
         // 绘制两个页面
-        this.drawCastlePage(ox, resourceManager, buttonManager, now, craftsmanManager, jobManager, buildingManager);
-        this.drawKingdomPage(ox + canvas.width, resourceManager, buttonManager, now, craftsmanManager, jobManager);
+        this.drawCastlePage(ox, resourceManager, buttonManager, now, craftsmanManager, jobManager, buildingManager, pageManager);
+        this.drawKingdomPage(ox + canvas.width, resourceManager, buttonManager, now, craftsmanManager, jobManager, pageManager);
 
         ctx.restore();
     },
 
-    drawCastlePage: function(offsetX, resourceManager, buttonManager, now, craftsmanManager, jobManager, buildingManager) {
+    drawCastlePage: function(offsetX, resourceManager, buttonManager, now, craftsmanManager, jobManager, buildingManager, pageManager) {
         this.drawPageTitle('地下城堡', offsetX);
-        this.drawButton(buttonManager.buttons.alchemy, '炼金', offsetX, now);
-        this.drawResources(resourceManager.getResources(), offsetX);
-
-        // 渲染建造按钮（位于炼金按钮下方）
+        
+        // 左侧：炼金按钮和建造按钮竖向排列
+        var leftX = 50;
+        var startY = 80;
+        var btnSpacing = 80;
+        
+        // 炼金按钮
+        var alchemyBtn = buttonManager.buttons.alchemy;
+        alchemyBtn.x = leftX;
+        alchemyBtn.y = startY;
+        this.drawButton(alchemyBtn, '炼金', offsetX, now);
+        
+        // 建造按钮
         if (buildingManager) {
+            buildingManager.button.x = leftX;
+            buildingManager.button.y = startY + btnSpacing;
             this.drawBuildButton(buildingManager, resourceManager, offsetX);
         }
+
+        // 右侧：仓库区域
+        var warehouseX = 280;
+        var scrollOffset = pageManager ? pageManager.castleScrollOffset : 0;
+        this.drawWarehouseRight(resourceManager.getResources(), scrollOffset, offsetX, warehouseX);
     },
 
-    drawKingdomPage: function(offsetX, resourceManager, buttonManager, now, craftsmanManager, jobManager) {
+    drawKingdomPage: function(offsetX, resourceManager, buttonManager, now, craftsmanManager, jobManager, pageManager) {
         this.drawPageTitle('地下王国', offsetX);
-        this.drawButton(buttonManager.buttons.collect, '收集', offsetX, now);
-        this.drawResources(resourceManager.getResources(), offsetX);
+        
+        // 左侧：收集按钮、工匠信息、倒计时、产出预览竖向排列
+        var leftX = 50;
+        var startY = 80;
+        
+        // 收集按钮
+        var collectBtn = buttonManager.buttons.collect;
+        collectBtn.x = leftX;
+        collectBtn.y = startY;
+        this.drawButton(collectBtn, '收集', offsetX, now);
 
-        // 渲染工匠状态和岗位列表
         if (craftsmanManager && jobManager) {
-            this.drawCraftsmanStatus(craftsmanManager, offsetX);
-            this.drawProductionCountdown(jobManager, now, offsetX);
-            this.drawJobList(jobManager, craftsmanManager, offsetX);
-            this.drawProductionPreview(jobManager, resourceManager, offsetX);
+            var ctx = this.ctx;
+            var ox = offsetX || 0;
+            var currentY = startY + 80;
+            
+            // 工匠状态
+            ctx.fillStyle = '#ffd700';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText('工匠: ' + craftsmanManager.getAssigned() + '/' + craftsmanManager.totalCapacity, leftX + ox, currentY);
+            ctx.fillText('可用: ' + craftsmanManager.getAvailable(), leftX + ox, currentY + 20);
+            currentY += 60;
+            
+            // 产出倒计时
+            var seconds = jobManager.getRemainingSeconds(now);
+            ctx.fillStyle = '#aaaaff';
+            ctx.font = '16px sans-serif';
+            ctx.fillText('下次产出: ' + seconds + 's', leftX + ox, currentY);
+            currentY += 40;
+            
+            // 产出预览
+            var changes = jobManager.previewProduction(resourceManager);
+            var changeKeys = Object.keys(changes);
+            if (changeKeys.length > 0) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = 'bold 16px sans-serif';
+                ctx.fillText('下次产出预览:', leftX + ox, currentY);
+                currentY += 24;
+                
+                ctx.font = '14px sans-serif';
+                for (var i = 0; i < changeKeys.length; i++) {
+                    var resKey = changeKeys[i];
+                    var delta = changes[resKey];
+                    if (delta === 0) continue;
+                    var name = (typeof RESOURCE_NAMES !== 'undefined' && RESOURCE_NAMES[resKey]) ? RESOURCE_NAMES[resKey] : resKey;
+                    if (delta > 0) {
+                        ctx.fillStyle = '#00ff00';
+                        ctx.fillText('+' + delta + ' ' + name, leftX + ox, currentY);
+                    } else {
+                        ctx.fillStyle = '#ff4444';
+                        ctx.fillText(delta + ' ' + name, leftX + ox, currentY);
+                    }
+                    currentY += 20;
+                }
+            }
+            
+            // 右侧：岗位分配滚动视图
+            var scrollOffset = pageManager ? pageManager.kingdomScrollOffset : 0;
+            this.drawJobScrollViewRight(jobManager, craftsmanManager, scrollOffset, offsetX, 320);
         }
     },
 
@@ -612,6 +736,394 @@ var CanvasRenderer = {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(seconds + 's', bx + button.width / 2, button.y + button.height / 2 + 20);
+    },
+
+    drawWarehouse: function(resources, scrollOffset, offsetX) {
+        var ctx = this.ctx;
+        var ox = offsetX || 0;
+        
+        // 标题
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText('仓库', 100 + ox, 350);
+
+        // 定义滚动区域
+        var scrollX = 100 + ox;
+        var scrollY = 380;
+        var scrollWidth = 600;
+        var scrollHeight = 200;
+
+        // 计算内容总高度
+        var names = (typeof RESOURCE_NAMES !== 'undefined') ? RESOURCE_NAMES : {};
+        var keys = Object.keys(resources);
+        var lineHeight = 24;
+        var contentHeight = keys.length * lineHeight;
+
+        // 限制滚动偏移量的最大值
+        var maxScroll = Math.max(0, contentHeight - scrollHeight);
+        var actualScroll = Math.min(scrollOffset, maxScroll);
+
+        // 裁剪区域
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(scrollX, scrollY, scrollWidth, scrollHeight);
+        ctx.clip();
+
+        // 绘制资源列表
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '18px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i];
+            var label = names[key] || key;
+            var y = scrollY + i * lineHeight - actualScroll;
+            ctx.fillText(label + ': ' + resources[key], scrollX, y);
+        }
+
+        ctx.restore();
+
+        // 绘制滚动条
+        if (contentHeight > scrollHeight) {
+            var scrollbarX = scrollX + scrollWidth + 5;
+            var scrollbarWidth = 8;
+            var scrollbarHeight = scrollHeight;
+            
+            // 滚动条背景
+            ctx.fillStyle = '#444444';
+            ctx.fillRect(scrollbarX, scrollY, scrollbarWidth, scrollbarHeight);
+
+            // 滚动条滑块
+            var thumbHeight = Math.max(20, scrollbarHeight * (scrollHeight / contentHeight));
+            var thumbY = scrollY + (actualScroll / maxScroll) * (scrollbarHeight - thumbHeight);
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(scrollbarX, thumbY, scrollbarWidth, thumbHeight);
+        }
+    },
+
+    drawWarehouseRight: function(resources, scrollOffset, offsetX, startX) {
+        var ctx = this.ctx;
+        var ox = offsetX || 0;
+        
+        // 标题
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText('仓库', startX + ox, 80);
+
+        // 定义滚动区域
+        var scrollX = startX + ox;
+        var scrollY = 110;
+        var scrollWidth = 480;
+        var scrollHeight = 470;
+
+        // 计算内容总高度
+        var names = (typeof RESOURCE_NAMES !== 'undefined') ? RESOURCE_NAMES : {};
+        var keys = Object.keys(resources);
+        var lineHeight = 22;
+        var contentHeight = keys.length * lineHeight;
+
+        // 限制滚动偏移量的最大值
+        var maxScroll = Math.max(0, contentHeight - scrollHeight);
+        var actualScroll = Math.min(scrollOffset, maxScroll);
+
+        // 裁剪区域
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(scrollX, scrollY, scrollWidth, scrollHeight);
+        ctx.clip();
+
+        // 绘制资源列表
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i];
+            var label = names[key] || key;
+            var y = scrollY + i * lineHeight - actualScroll;
+            ctx.fillText(label + ': ' + resources[key], scrollX, y);
+        }
+
+        ctx.restore();
+
+        // 绘制滚动条
+        if (contentHeight > scrollHeight) {
+            var scrollbarX = scrollX + scrollWidth + 5;
+            var scrollbarWidth = 8;
+            var scrollbarHeight = scrollHeight;
+            
+            // 滚动条背景
+            ctx.fillStyle = '#444444';
+            ctx.fillRect(scrollbarX, scrollY, scrollbarWidth, scrollbarHeight);
+
+            // 滚动条滑块
+            var thumbHeight = Math.max(20, scrollbarHeight * (scrollHeight / contentHeight));
+            var thumbY = scrollY + (actualScroll / maxScroll) * (scrollbarHeight - thumbHeight);
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(scrollbarX, thumbY, scrollbarWidth, thumbHeight);
+        }
+    },
+
+    drawJobScrollView: function(jobManager, craftsmanManager, scrollOffset, offsetX, resourceManager) {
+        var ctx = this.ctx;
+        var ox = offsetX || 0;
+        
+        // 定义滚动区域
+        var scrollX = 100 + ox;
+        var scrollY = 280;
+        var scrollWidth = 600;
+        var scrollHeight = 300;
+
+        // 计算内容总高度
+        var config = (typeof JOB_CONFIG_EXTERNAL !== 'undefined') ? JOB_CONFIG_EXTERNAL : {};
+        var jobs = config.jobs || {};
+        var jobIds = Object.keys(jobs);
+        
+        // 工匠状态行 + 倒计时行 + 岗位列表 + 产出预览
+        var craftsmanHeight = 22;
+        var countdownHeight = 22;
+        var jobListHeight = jobIds.length * 40;
+        var previewHeight = 100; // 预留空间
+        var contentHeight = craftsmanHeight + countdownHeight + jobListHeight + previewHeight;
+
+        // 限制滚动偏移量
+        var maxScroll = Math.max(0, contentHeight - scrollHeight);
+        var actualScroll = Math.min(scrollOffset, maxScroll);
+
+        // 裁剪区域
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(scrollX, scrollY, scrollWidth, scrollHeight);
+        ctx.clip();
+
+        var currentY = scrollY - actualScroll;
+
+        // 绘制工匠状态
+        ctx.fillStyle = '#ffd700';
+        ctx.font = 'bold 18px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText('工匠: ' + craftsmanManager.getAssigned() + '/' + craftsmanManager.totalCapacity + ' (可用: ' + craftsmanManager.getAvailable() + ')', scrollX, currentY);
+        currentY += craftsmanHeight;
+
+        // 绘制产出倒计时
+        var seconds = jobManager.getRemainingSeconds(performance.now());
+        ctx.fillStyle = '#aaaaff';
+        ctx.font = '16px sans-serif';
+        ctx.fillText('下次产出: ' + seconds + 's', scrollX, currentY);
+        currentY += countdownHeight;
+
+        // 绘制岗位列表
+        var btnSize = 30;
+        var available = craftsmanManager.getAvailable();
+        if (!jobManager._uiButtons) jobManager._uiButtons = {};
+
+        for (var i = 0; i < jobIds.length; i++) {
+            var jobId = jobIds[i];
+            var jobDef = jobs[jobId];
+            var assigned = jobManager.assignments[jobId] || 0;
+
+            // 岗位名称和分配数
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '16px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(jobDef.name + ': ' + assigned, scrollX, currentY + btnSize / 2);
+
+            // - 按钮
+            var minusBtnX = scrollX + 120;
+            var canMinus = assigned > 0;
+            ctx.fillStyle = canMinus ? '#cc4444' : '#555555';
+            ctx.fillRect(minusBtnX, currentY, btnSize, btnSize);
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(minusBtnX, currentY, btnSize, btnSize);
+            ctx.fillStyle = canMinus ? '#ffffff' : '#999999';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('-', minusBtnX + btnSize / 2, currentY + btnSize / 2);
+
+            // + 按钮
+            var plusBtnX = minusBtnX + btnSize + 10;
+            var canPlus = available > 0;
+            ctx.fillStyle = canPlus ? '#44aa44' : '#555555';
+            ctx.fillRect(plusBtnX, currentY, btnSize, btnSize);
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(plusBtnX, currentY, btnSize, btnSize);
+            ctx.fillStyle = canPlus ? '#ffffff' : '#999999';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('+', plusBtnX + btnSize / 2, currentY + btnSize / 2);
+
+            // 记录按钮位置（不含 offsetX，用于点击检测）
+            jobManager._uiButtons[jobId] = {
+                minus: { x: scrollX + 120 - ox, y: currentY + actualScroll, width: btnSize, height: btnSize },
+                plus: { x: plusBtnX - ox, y: currentY + actualScroll, width: btnSize, height: btnSize }
+            };
+
+            currentY += 40;
+        }
+
+        // 绘制产出预览
+        if (resourceManager) {
+            var changes = jobManager.previewProduction(resourceManager);
+            var changeKeys = Object.keys(changes);
+            if (changeKeys.length > 0) {
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '16px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText('下次产出预览:', scrollX, currentY);
+                currentY += 24;
+
+                for (var i = 0; i < changeKeys.length; i++) {
+                    var resKey = changeKeys[i];
+                    var delta = changes[resKey];
+                    if (delta === 0) continue;
+                    var name = (typeof RESOURCE_NAMES !== 'undefined' && RESOURCE_NAMES[resKey]) ? RESOURCE_NAMES[resKey] : resKey;
+                    if (delta > 0) {
+                        ctx.fillStyle = '#00ff00';
+                        ctx.fillText('+' + delta + ' ' + name, scrollX, currentY);
+                    } else {
+                        ctx.fillStyle = '#ff4444';
+                        ctx.fillText(delta + ' ' + name, scrollX, currentY);
+                    }
+                    currentY += 22;
+                }
+            }
+        }
+
+        ctx.restore();
+
+        // 绘制滚动条
+        if (contentHeight > scrollHeight) {
+            var scrollbarX = scrollX + scrollWidth + 5;
+            var scrollbarWidth = 8;
+            var scrollbarHeight = scrollHeight;
+            
+            // 滚动条背景
+            ctx.fillStyle = '#444444';
+            ctx.fillRect(scrollbarX, scrollY, scrollbarWidth, scrollbarHeight);
+
+            // 滚动条滑块
+            var thumbHeight = Math.max(20, scrollbarHeight * (scrollHeight / contentHeight));
+            var thumbY = scrollY + (actualScroll / maxScroll) * (scrollbarHeight - thumbHeight);
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(scrollbarX, thumbY, scrollbarWidth, thumbHeight);
+        }
+    },
+
+    drawJobScrollViewRight: function(jobManager, craftsmanManager, scrollOffset, offsetX, startX) {
+        var ctx = this.ctx;
+        var ox = offsetX || 0;
+        
+        // 定义滚动区域（右侧）
+        var scrollX = startX + ox;
+        var scrollY = 80;
+        var scrollWidth = 450;
+        var scrollHeight = 500;
+
+        // 计算内容总高度
+        var config = (typeof JOB_CONFIG_EXTERNAL !== 'undefined') ? JOB_CONFIG_EXTERNAL : {};
+        var jobs = config.jobs || {};
+        var jobIds = Object.keys(jobs);
+        
+        var jobListHeight = jobIds.length * 40;
+        var contentHeight = jobListHeight + 20;
+
+        // 限制滚动偏移量
+        var maxScroll = Math.max(0, contentHeight - scrollHeight);
+        var actualScroll = Math.min(scrollOffset, maxScroll);
+
+        // 裁剪区域
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(scrollX, scrollY, scrollWidth, scrollHeight);
+        ctx.clip();
+
+        var currentY = scrollY - actualScroll;
+
+        // 绘制岗位列表
+        var btnSize = 30;
+        var available = craftsmanManager.getAvailable();
+        if (!jobManager._uiButtons) jobManager._uiButtons = {};
+
+        for (var i = 0; i < jobIds.length; i++) {
+            var jobId = jobIds[i];
+            var jobDef = jobs[jobId];
+            var assigned = jobManager.assignments[jobId] || 0;
+
+            // 岗位名称和分配数
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '16px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(jobDef.name + ': ' + assigned, scrollX, currentY + btnSize / 2);
+
+            // - 按钮
+            var minusBtnX = scrollX + 120;
+            var canMinus = assigned > 0;
+            ctx.fillStyle = canMinus ? '#cc4444' : '#555555';
+            ctx.fillRect(minusBtnX, currentY, btnSize, btnSize);
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(minusBtnX, currentY, btnSize, btnSize);
+            ctx.fillStyle = canMinus ? '#ffffff' : '#999999';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('-', minusBtnX + btnSize / 2, currentY + btnSize / 2);
+
+            // + 按钮
+            var plusBtnX = minusBtnX + btnSize + 10;
+            var canPlus = available > 0;
+            ctx.fillStyle = canPlus ? '#44aa44' : '#555555';
+            ctx.fillRect(plusBtnX, currentY, btnSize, btnSize);
+            ctx.strokeStyle = '#333333';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(plusBtnX, currentY, btnSize, btnSize);
+            ctx.fillStyle = canPlus ? '#ffffff' : '#999999';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('+', plusBtnX + btnSize / 2, currentY + btnSize / 2);
+
+            // 记录按钮位置（不含 offsetX，用于点击检测）
+            jobManager._uiButtons[jobId] = {
+                minus: { x: minusBtnX - ox, y: currentY + actualScroll, width: btnSize, height: btnSize },
+                plus: { x: plusBtnX - ox, y: currentY + actualScroll, width: btnSize, height: btnSize }
+            };
+
+            currentY += 40;
+        }
+
+        ctx.restore();
+
+        // 绘制滚动条
+        if (contentHeight > scrollHeight) {
+            var scrollbarX = scrollX + scrollWidth + 5;
+            var scrollbarWidth = 8;
+            var scrollbarHeight = scrollHeight;
+            
+            // 滚动条背景
+            ctx.fillStyle = '#444444';
+            ctx.fillRect(scrollbarX, scrollY, scrollbarWidth, scrollbarHeight);
+
+            // 滚动条滑块
+            var thumbHeight = Math.max(20, scrollbarHeight * (scrollHeight / contentHeight));
+            var thumbY = scrollY + (actualScroll / maxScroll) * (scrollbarHeight - thumbHeight);
+            ctx.fillStyle = '#888888';
+            ctx.fillRect(scrollbarX, thumbY, scrollbarWidth, thumbHeight);
+        }
     }
 };
 
@@ -625,6 +1137,10 @@ var PageManager = {
     dragStartX: 0,
     dragCurrentX: 0,
     _dragBaseOffset: 0,
+
+    // 滚动偏移量
+    castleScrollOffset: 0,
+    kingdomScrollOffset: 0,
 
     // 动画相关
     animationStartTime: 0,
@@ -707,6 +1223,20 @@ var PageManager = {
         var t = elapsed / duration;
         var ease = 1 - (1 - t) * (1 - t);
         this.offsetX = this.animationStartOffset + (this.animationTargetOffset - this.animationStartOffset) * ease;
+    },
+
+    handleScroll: function(page, delta) {
+        // page: 0 = Castle, 1 = Kingdom
+        // delta: 正数向下滚动，负数向上滚动
+        if (page === 0) {
+            this.castleScrollOffset += delta;
+            // 限制滚动范围（不能滚动到负值）
+            if (this.castleScrollOffset < 0) this.castleScrollOffset = 0;
+        } else if (page === 1) {
+            this.kingdomScrollOffset += delta;
+            // 限制滚动范围（不能滚动到负值）
+            if (this.kingdomScrollOffset < 0) this.kingdomScrollOffset = 0;
+        }
     }
 };
 
@@ -887,7 +1417,7 @@ var JobManager = {
 var BuildingManager = {
     buildCounts: {},
     _config: null,
-    button: { x: 100, y: 280, width: 160, height: 60 },
+    button: { x: 280, y: 200, width: 160, height: 60 },
 
     init: function(buildingConfig) {
         this._config = buildingConfig;

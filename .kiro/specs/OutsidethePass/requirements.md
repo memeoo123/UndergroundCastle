@@ -36,6 +36,8 @@
 | Production_Countdown | 距离下次 Production_Tick 的剩余秒数显示 |
 | Production_Preview | 下次 Production_Tick 资源变化量的预览显示 |
 | Build_Button | 建造按钮（炼金按钮下方） |
+| Warehouse | 仓库，显示所有资源的总和 |
+| ScrollView | 滚动视图，用于显示超出屏幕的内容列表 |
 
 ## 需求
 
@@ -204,3 +206,22 @@
 6. WHEN 资源变化量为零时，THE Canvas_Renderer SHALL 不显示该资源
 7. WHEN 没有任何工匠被分配到岗位时，THE Canvas_Renderer SHALL 不显示产出预览区域
 8. THE 产出预览 SHALL 在工匠分配变化后立即更新（下一帧反映）
+
+
+### 需求 22：地下城堡界面优化
+**用户故事：** 作为玩家，我想在地下城堡界面清晰地看到仓库资源总览和操作按钮，避免UI重叠。
+#### 验收标准
+1. WHEN 进入 Castle_Page，THE Canvas_Renderer SHALL 显示"仓库"标题和资源总和
+2. THE 仓库区域 SHALL 使用滚动视图显示所有资源（17种），避免超出屏幕
+3. THE 炼金按钮和建造按钮 SHALL 布局合理，不与仓库区域重叠
+4. THE 滚动视图 SHALL 支持鼠标滚轮和触摸拖拽滚动
+5. THE 滚动视图 SHALL 显示滚动条指示当前位置
+
+### 需求 23：地下王国界面优化
+**用户故事：** 作为玩家，我想在地下王国界面清晰地看到所有工作岗位和操作按钮，不需要看到仓库。
+#### 验收标准
+1. WHEN 进入 Kingdom_Page，THE Canvas_Renderer SHALL NOT 显示仓库区域
+2. THE 工匠状态、岗位列表、产出倒计时、产出预览 SHALL 使用滚动视图显示
+3. THE 滚动视图 SHALL 支持鼠标滚轮和触摸拖拽滚动
+4. THE 滚动视图 SHALL 显示滚动条指示当前位置
+5. THE 收集按钮 SHALL 布局合理，不与滚动区域重叠

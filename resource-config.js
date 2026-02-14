@@ -15,7 +15,9 @@ var RESOURCE_CONFIG_EXTERNAL = {
         rune:      { name: '符文', initial: 0 },
         darksteel: { name: '暗钢', initial: 0 },
         gospel:    { name: '福音', initial: 0 },
-        goldOre:   { name: '金矿', initial: 0 }
+        goldOre:   { name: '金矿', initial: 0 },
+        magicPowder: { name: '魔粉', initial: 0 },
+        spiritWood: { name: '灵木', initial: 0 }
     }
 };
 
