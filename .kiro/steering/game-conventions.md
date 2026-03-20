@@ -12,14 +12,16 @@ inclusion: auto
 | 关内 | Inside_Dungeon | 地牢探险部分，玩家派遣冒险者进入地牢战斗和探索 |
 | 冒险者 | Adventurer | 玩家招募和培养的角色单位，可派遣进入地牢 |
 | 地牢 | Dungeon | 关内探险的场所，包含多个层级 |
-| 地牢层级 | Dungeon_Layer | 地牢的深度单位，每层有不同难度和奖励 |
-| 战斗层 | Combat_Layer | 普通地牢层级，包含怪物、宝藏和 Boss，需击败 Boss 解锁下一层 |
-| 资源层 | Resource_Layer | 特殊地牢层级（每5层出现），包含矿产设施，无怪物，安全采集资源 |
-| 矿产设施 | Mine_Facility | 资源层中的可采集地点，玩家到达后可获取对应资源 |
-| 木厂 | Lumber_Mill | 资源层矿产设施，采集产出木头（第5层资源层） |
-| 石头矿 | Stone_Mine | 资源层矿产设施，采集产出石头（第5层资源层） |
-| 铁矿 | Iron_Mine | 资源层矿产设施，采集产出铁（第10层资源层） |
-| 金矿设施 | Gold_Mine | 资源层矿产设施，采集产出金矿石（第10层资源层） |
+| 地牢层级 | Dungeon_Layer | 地牢的深度单位，分为固定层和随机层两种类型 |
+| 固定层 | Fixed_Layer | 每5层出现一次（第1层、第5层、第10层、第15层……）的特殊层级，地图小、布局固定、无怪物，包含固定的矿产建筑和通往下层的入口 |
+| 随机层 | Random_Layer | 非固定层的普通层级，地图大（50x50）、随机生成、每步随机遇怪、下层入口位置随机 |
+| 矿产建筑 | Mine_Facility | 固定层中的资源生产设施，玩家到达后可采集对应资源 |
+| 木厂 | Lumber_Mill | 固定层矿产建筑，采集产出木头（第1层固定层） |
+| 石头矿场 | Stone_Mine | 固定层矿产建筑，采集产出石头（第1层固定层） |
+| 铁矿场 | Iron_Mine | 固定层矿产建筑，采集产出铁（第5层固定层） |
+| 炼钢厂 | Steel_Forge | 固定层矿产建筑，采集产出钢（第10层固定层） |
+| 下层入口 | Layer_Entrance | 固定层中通往下一层的固定位置入口 |
+| 快速传送 | Quick_Teleport | 玩家进入探险时可从已到达过的固定层列表中选择起始层 |
 | 怪物 | Monster | 地牢中的敌对单位 |
 | Boss | Boss | 每层地牢的最终挑战敌人 |
 | 宝藏 | Treasure | 探索中可收集的资源和物品 |
@@ -106,18 +108,20 @@ inclusion: auto
 | 辅助技能 | Buff_Skill | 士兵的增益技能，攻击时自动释放，为自己施加状态效果 |
 | 迷雾战争 | FogOfWar | 管理地牢地图的视野和迷雾状态，未探索区域全黑 |
 | 场景管理器 | SceneManager | 管理关外/关内场景切换（outside/dungeon-select/exploration/combat） |
-| 地牢地图 | DungeonMap | 管理 50x50 网格地图数据，包括地块类型和内容 |
+| 标准士兵表 | Soldier_Table | 手动表-4-标准士兵表.json，我方士兵属性的权威数据源（1-10阶，含攻击/血量/防御/队伍数量） |
+| 标准敌人表 | Enemy_Table | 手动表-5-标准敌人表.json，敌方单位属性的权威数据源（1-10阶，含攻击/血量/防御） |
+| 地牢地图 | DungeonMap | 管理网格地图数据，固定层小地图、随机层50x50大地图，包括地块类型和内容 |
 | 地牢选择界面 | DungeonSelectUI | 派遣队伍和选择地牢层级的 UI |
 | 地牢渲染器 | DungeonRenderer | 负责探索界面的 Canvas 渲染（地图网格、迷雾、玩家位置） |
 | 战斗渲染器 | CombatRenderer | 负责战斗界面的 Canvas 渲染（单位血条、技能菜单、战斗日志） |
 | 配置加载器 | ConfigLoader | 统一加载所有关内配置（地牢/怪物/Boss/战斗） |
-| 地牢配置 | Dungeon_Config | 外置配置文件 dungeon-config.js，定义地图尺寸、视野、战斗层级（layers）和资源层级（resourceLayers），含 isResourceLayer() 和 getResourceLayer() 辅助方法 |
+| 地牢配置 | Dungeon_Config | 外置配置文件 dungeon-config.js，定义地图尺寸、视野、随机层级（layers）和固定层级（fixedLayers），含 isFixedLayer() 和 getFixedLayer() 辅助方法 |
 | 怪物配置 | Monster_Config | 外置配置文件 monster-config.js，定义怪物类型（属性、技能、奖励） |
 | Boss 配置 | Boss_Config | 外置配置文件 boss-config.js，定义 Boss（属性、特殊技能、奖励） |
 | 战斗配置 | Combat_Config | 外置配置文件 combat-config.js，定义伤害公式、技能、状态效果 |
 | 视野范围 | View_Range | 以玩家位置为中心，曼哈顿距离 ≤ 2 的 5x5 区域 |
 | 地块 | Tile | 地牢地图的最小单位，类型包括 empty/wall/entrance/portal，可含怪物/宝藏内容 |
-| 传送阵 | Teleport_Portal | 地牢中的传送设施，位于距入口最远的可达位置，踏入时触发 Boss 战，击败后可选择进入下一层或其他已解锁层级 |
+| 传送阵 | Teleport_Portal | 随机层中的传送设施，位于距入口最远的可达位置，踏入时触发 Boss 战，击败后可选择进入下一层或其他已解锁层级 |
 | 史莱姆 | Slime | 第一层怪物，低属性（攻2/防1/血10/速3） |
 | 蝙蝠 | Bat | 第一层怪物，高速低防（攻3/防0/血8/速7） |
 | 巨鼠 | Rat | 第一层怪物，均衡型（攻3/防2/血12/速4） |

@@ -4,6 +4,10 @@
 
 地牢探险系统（Dungeon Exploration System）是 Underground Castle 游戏的关内核心部分。玩家派遣冒险者进入地牢，通过战斗、探索和挑战 Boss 来获取资源和推进游戏进度。系统采用 2D Canvas 渲染，使用单文件架构，配置外置化设计。
 
+地牢由两种层级交替组成：固定层（Fixed_Layer）和随机层（Random_Layer）。固定层每5层出现一次（第1层、第5层、第10层、第15层……），地图小、布局固定、无怪物，包含矿产建筑和通往下层的入口；随机层为其余层级，地图大、随机生成、每步随机遇怪、下层入口随机。玩家可从已到达过的固定层列表中选择起始层快速传送。
+
+手动表-4-标准士兵表.json 和 手动表-5-标准敌人表.json 是经过矫正的权威数据源，分别定义我方士兵和敌方单位的属性配置。
+
 ## Glossary
 
 - **Inside_Dungeon**: 关内，地牢探险部分，玩家派遣冒险者进入地牢战斗和探索
@@ -17,10 +21,21 @@
 - **Progress_Tracker**: 进度追踪器，记录玩家的地牢解锁和完成状态
 - **Treasure**: 宝藏，探索中可收集的资源和物品
 - **Dungeon**: 地牢，关内探险的场所，包含多个层级
-- **Dungeon_Layer**: 地牢层级，地牢的深度单位，每层有不同难度和奖励
-- **Teleport_Portal**: 传送阵，地牢中的传送设施，踏入时触发 Boss 战，击败后可选择传送到已解锁的层级
+- **Dungeon_Layer**: 地牢层级，地牢的深度单位，分为固定层和随机层两种类型
+- **Fixed_Layer**: 固定层，每5层出现一次（第1层、第5层、第10层……）的特殊层级，地图小、布局固定、无怪物，包含固定的矿产建筑和通往下层的入口
+- **Random_Layer**: 随机层，非固定层的普通层级，地图大（50x50）、随机生成、每步随机遇怪、下层入口位置随机
+- **Mine_Facility**: 矿产建筑，固定层中的资源生产设施，玩家到达后可采集对应资源
+- **Lumber_Mill**: 木厂，固定层矿产建筑，采集产出木头（第1层固定层）
+- **Stone_Mine**: 石头矿场，固定层矿产建筑，采集产出石头（第1层固定层）
+- **Iron_Mine**: 铁矿场，固定层矿产建筑，采集产出铁（第5层固定层）
+- **Steel_Forge**: 炼钢厂，固定层矿产建筑，采集产出钢（第10层固定层）
+- **Layer_Entrance**: 下层入口，固定层中通往下一层的固定位置入口
+- **Quick_Teleport**: 快速传送，玩家进入探险时可从已到达过的固定层列表中选择起始层
+- **Teleport_Portal**: 传送阵，随机层中的传送设施，踏入时触发 Boss 战，击败后可选择传送到已解锁的层级
 - **Canvas_Renderer**: Canvas 渲染器，负责 2D 图形渲染
 - **Config_Loader**: 配置加载器，从外部 JS 文件加载配置数据
+- **Soldier_Table**: 标准士兵表（手动表-4-标准士兵表.json），我方士兵属性的权威数据源
+- **Enemy_Table**: 标准敌人表（手动表-5-标准敌人表.json），敌方单位属性的权威数据源
 
 ## Requirements
 
@@ -86,7 +101,7 @@
 
 #### Acceptance Criteria
 
-1. THE Dungeon_System SHALL 在每层地牢生成一个"传送阵"（Teleport_Portal），位于距离入口最远的可达位置
+1. THE Dungeon_System SHALL 在每个随机层（Random_Layer）生成一个"传送阵"（Teleport_Portal），位于距离入口最远的可达位置
 2. WHEN 冒险者到达传送阵 THEN THE Dungeon_System SHALL 触发该层的 Boss 战斗
 3. WHEN Boss 战开始 THEN THE Combat_Engine SHALL 加载 Boss 的特殊配置和行为
 4. WHEN Boss 使用特殊技能 THEN THE Combat_Engine SHALL 执行该技能的特定效果
@@ -159,21 +174,50 @@
 4. WHEN 冒险者获得状态效果 THEN THE Dungeon_System SHALL 显示状态图标和剩余回合数
 5. THE Dungeon_System SHALL 在战斗界面显示冒险者的可用技能和冷却时间
 
-### Requirement 11: 资源层系统
+### Requirement 11: 固定层系统
 
-**User Story:** 作为玩家，我想要每隔5层进入一个特殊的资源层，以便采集矿产资源来支持城堡建设。
+**User Story:** 作为玩家，我想要每隔几层进入一个固定层，以便在安全环境中采集矿产资源、规划探险路线。
 
 #### Acceptance Criteria
 
-1. WHEN 层级编号为 5 的倍数（5, 10, 15...）THEN THE Dungeon_System SHALL 生成资源层而非普通战斗层
-2. THE Dungeon_System SHALL 为资源层使用固定的预设地图布局，而非随机生成
-3. THE Dungeon_System SHALL 在资源层中放置矿产设施（如木厂、石头矿、铁矿、金矿等）
-4. WHEN 玩家到达矿产设施位置 THEN THE Dungeon_System SHALL 允许玩家采集该矿产资源
-5. WHEN 矿产被采集 THEN THE Dungeon_System SHALL 将资源添加到本次探险累计资源中
-6. THE Dungeon_System SHALL 根据资源层深度配置不同的矿产类型：
-   - 第 5 层资源层：木厂（产出木头）、石头矿（产出石头）
-   - 第 10 层资源层：铁矿（产出铁）、金矿（产出金矿石）
-   - 更深层资源层：更高级矿产（水晶矿、符文矿等）
-7. THE Dungeon_System SHALL 资源层无怪物和 Boss，玩家可安全采集
-8. THE Dungeon_System SHALL 从外部配置文件加载资源层地图和矿产配置
-9. WHEN 玩家完成资源层采集并返回入口 THEN THE Dungeon_System SHALL 自动解锁下一层（无需击败 Boss）
+1. THE Dungeon_System SHALL 将第1层以及每隔5层（第1层、第5层、第10层、第15层……）设定为固定层（Fixed_Layer）
+2. THE Dungeon_System SHALL 为固定层使用固定的预设地图布局，地图尺寸小于随机层（如 20x20 至 30x30）
+3. THE Dungeon_System SHALL 在固定层中放置固定的矿产建筑（Mine_Facility），矿产建筑位置和类型由配置决定
+4. THE Dungeon_System SHALL 在固定层中放置一个固定位置的下层入口（Layer_Entrance），玩家到达该位置后可进入下一层
+5. THE Dungeon_System SHALL 固定层无怪物、无 Boss，玩家可安全探索和采集
+6. WHEN 玩家到达矿产建筑位置 THEN THE Dungeon_System SHALL 允许玩家采集该矿产资源，并将资源添加到本次探险累计资源中
+7. THE Dungeon_System SHALL 根据固定层深度配置不同的矿产类型：
+   - 第 1 层固定层：木厂（产出木头）、石头矿场（产出石头）
+   - 第 5 层固定层：铁矿场（产出铁）
+   - 第 10 层固定层：炼钢厂（产出钢）
+   - 更深层固定层：更高级矿产（水晶矿、符文矿等），由配置驱动
+8. THE Dungeon_System SHALL 从外部配置文件加载固定层地图布局和矿产建筑配置
+9. WHEN 玩家到达固定层的下层入口 THEN THE Dungeon_System SHALL 将玩家传送到下一层（随机层），并记录该固定层为"已到达"
+
+### Requirement 12: 随机层系统
+
+**User Story:** 作为玩家，我想要在随机生成的大地图中探险，以便体验充满未知和挑战的冒险。
+
+#### Acceptance Criteria
+
+1. THE Dungeon_System SHALL 将非固定层的所有层级设定为随机层（Random_Layer）
+2. THE Dungeon_System SHALL 为随机层使用 50x50 的大地图，地图内容随机生成
+3. WHEN 冒险者在随机层中每移动一步 THEN THE Exploration_Manager SHALL 根据怪物密度随机判定是否触发怪物遭遇
+4. THE Dungeon_System SHALL 在随机层中随机放置一个下层入口（Layer_Entrance），位于距地图入口较远的可达位置
+5. THE Dungeon_System SHALL 在随机层中随机放置传送阵（Teleport_Portal），位于距入口最远的可达位置，踏入触发 Boss 战
+6. WHEN 冒险者到达随机层的下层入口 THEN THE Dungeon_System SHALL 将玩家传送到下一层
+7. THE Dungeon_System SHALL 使用 BFS 算法保证随机层地图从入口到下层入口和传送阵的连通性
+8. THE Dungeon_System SHALL 保证随机层入口周围 3x3 区域无墙壁和怪物（安全区）
+
+### Requirement 13: 快速传送系统
+
+**User Story:** 作为玩家，我想要在进入探险时选择已到达过的固定层作为起始层，以便跳过已探索的低层直接到达目标深度。
+
+#### Acceptance Criteria
+
+1. WHEN 玩家进入探险选择界面 THEN THE Dungeon_System SHALL 显示已到达过的固定层列表（Quick_Teleport）
+2. WHEN 玩家从固定层列表中选择一个层级 THEN THE Dungeon_System SHALL 将玩家直接传送到该固定层开始探险
+3. THE Progress_Tracker SHALL 记录玩家已到达过的所有固定层
+4. WHEN 玩家首次到达一个固定层 THEN THE Progress_Tracker SHALL 将该固定层添加到已到达固定层列表中
+5. THE Dungeon_System SHALL 在快速传送列表中显示每个固定层的名称和层级编号
+6. WHEN 玩家选择快速传送到某固定层 THEN THE Dungeon_System SHALL 从该固定层开始探险，玩家可正常探索该固定层并通过下层入口继续深入
