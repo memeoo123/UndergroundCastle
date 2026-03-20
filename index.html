@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Underground Castle - 关外经营</title>
+    <title>Underground Castle - 地下城堡</title>
     <style>
         body {
             margin: 0;
@@ -24,21 +24,121 @@
     <script src="resource-config.js"></script>
     <script src="outside-config.js"></script>
     <script src="job-config.js"></script>
+    <script src="soldier-config.js"></script>
+    <script src="dungeon-config.js"></script>
+    <script src="monster-config.js"></script>
+    <script src="boss-config.js"></script>
+    <script src="combat-config.js"></script>
     <script src="outside-logic.js"></script>
+    <script src="inside-logic.js"></script>
     <script>
-    // 加载外置配置，覆盖默认值
+    // ============================================================
+    // SceneManager（场景管理器）
+    // ============================================================
+    var SceneManager = {
+        currentScene: 'outside',  // 'outside' | 'dungeon-select' | 'exploration' | 'combat'
+        _params: null,            // 场景切换时传递的参数
+        _combatCallback: null,    // 战斗结束后的回调
+
+        switchTo: function(scene, params) {
+            this._params = params || {};
+            this.currentScene = scene;
+
+            if (scene === 'dungeon-select') {
+                ConfigLoader.loadAll();
+                ProgressTracker.init(SceneManager._loadDungeonProgress());
+                DungeonSelectUI.reset();
+                DungeonSelectUI.maxPartySize = ConfigLoader.getMaxPartySize();
+            }
+
+            if (scene === 'exploration') {
+                var layer = params.layer || 1;
+                var party = params.party || [];
+                DungeonMap.init(layer, ConfigLoader);
+                FogOfWar.init(ConfigLoader.getMapWidth(), ConfigLoader.getMapHeight());
+                ExplorationManager.init(layer, party, null, DungeonMap, FogOfWar, ConfigLoader);
+            }
+
+            if (scene === 'combat') {
+                this._combatCallback = params.callback || null;
+            }
+
+            if (scene === 'outside') {
+                // 返回关外时保存地牢进度
+                SceneManager._saveDungeonProgress();
+            }
+        },
+
+        update: function(timestamp, deltaTime) {
+            if (this.currentScene === 'outside') {
+                PageManager.updateAnimation(timestamp, document.getElementById('gameCanvas').width);
+                JobManager.update(timestamp, ResourceManager);
+            } else if (this.currentScene === 'combat') {
+                // 战斗场景：更新 CombatEngine（独立 CD 制）
+                CombatEngine.update(deltaTime / 1000);  // 转换为秒
+                
+                // 战斗结束时自动触发回调
+                if (CombatEngine.state !== 'active' && this._combatCallback) {
+                    var cb = this._combatCallback;
+                    this._combatCallback = null;
+                    cb(CombatEngine.state);
+                }
+            }
+            // exploration 场景由玩家点击驱动，无需 tick update
+        },
+
+        render: function(ctx, canvas) {
+            if (this.currentScene === 'outside') {
+                CanvasRenderer.render(ResourceManager, ButtonManager, PageManager, performance.now(),
+                    CraftsmanManager, JobManager, BuildingManager, SoldierManager);
+            } else if (this.currentScene === 'dungeon-select') {
+                DungeonSelectUI.render(ctx, canvas, ProgressTracker, SoldierManager);
+            } else if (this.currentScene === 'exploration') {
+                DungeonRenderer.render(ctx, canvas, DungeonMap, FogOfWar,
+                    ExplorationManager.playerPos, ExplorationManager.party,
+                    ExplorationManager.collectedResources);
+            } else if (this.currentScene === 'combat') {
+                CombatRenderer.render(ctx, canvas, CombatEngine);
+            }
+        },
+
+        // 地牢进度持久化辅助
+        _loadDungeonProgress: function() {
+            try {
+                var raw = localStorage.getItem('underground_castle_outside');
+                if (!raw) return null;
+                var data = JSON.parse(raw);
+                return data.dungeon || null;
+            } catch (e) { return null; }
+        },
+
+        _saveDungeonProgress: function() {
+            try {
+                var raw = localStorage.getItem('underground_castle_outside');
+                var data = raw ? JSON.parse(raw) : {};
+                data.dungeon = ProgressTracker.saveProgress();
+                localStorage.setItem('underground_castle_outside', JSON.stringify(data));
+            } catch (e) { /* QuotaExceededError — 静默处理 */ }
+        }
+    };
+
+    // ============================================================
+    // 加载外置配置
+    // ============================================================
     function loadConfigs() {
         if (typeof OUTSIDE_CONFIG_EXTERNAL !== 'undefined') {
             var cfg = OUTSIDE_CONFIG_EXTERNAL;
-            // 应用按钮冷却配置（已在 ButtonManager.onClick 中动态读取）
-            // 应用 Canvas 尺寸
             var canvas = document.getElementById('gameCanvas');
             canvas.width = cfg.canvas ? cfg.canvas.width : 800;
             canvas.height = cfg.canvas ? cfg.canvas.height : 600;
         }
+        // 加载关内配置
+        ConfigLoader.loadAll();
     }
 
+    // ============================================================
     // 初始化游戏
+    // ============================================================
     function initGame() {
         loadConfigs();
 
@@ -83,16 +183,27 @@
             }
         }
 
-        // 初始化渲染器和输入（传入所有管理器）
+        // 恢复士兵数据
+        if (saved.soldiers && Array.isArray(saved.soldiers)) {
+            SoldierManager.soldiers = saved.soldiers;
+        } else {
+            SoldierManager.soldiers = [];
+        }
+
+        // 恢复地牢进度
+        if (saved.dungeon) {
+            ProgressTracker.init(saved.dungeon);
+        }
+
+        // 初始化渲染器
         CanvasRenderer.init(canvas);
-        InputHandler.init(canvas, ButtonManager, PageManager, BuildingManager, JobManager, CraftsmanManager);
 
         // 资源变化时自动存档 + 触发 Toast — 包装 addResource
         var origAddResource = ResourceManager.addResource;
         var origDeduct = ResourceManager.deduct;
 
         function saveAll() {
-            SaveSystem.save(ResourceManager.getResources(), CraftsmanManager, JobManager.getAssignments(), BuildingManager.getBuildCounts());
+            SaveSystem.save(ResourceManager.getResources(), CraftsmanManager, JobManager.getAssignments(), BuildingManager.getBuildCounts(), SoldierManager.getSoldiers());
         }
 
         function getCanvasSize() {
@@ -144,23 +255,351 @@
             }
         };
 
+        // 包装 SoldierManager.recruit/promote：操作成功后持久化士兵数据
+        var origRecruit = SoldierManager.recruit;
+        SoldierManager.recruit = function(resourceManager) {
+            var result = origRecruit.call(SoldierManager, resourceManager);
+            if (result) { saveAll(); }
+            return result;
+        };
+
+        var origPromote = SoldierManager.promote;
+        SoldierManager.promote = function(soldierIndex, targetTypeId, resourceManager) {
+            var result = origPromote.call(SoldierManager, soldierIndex, targetTypeId, resourceManager);
+            if (result) { saveAll(); }
+            return result;
+        };
+
+        // ============================================================
+        // 场景感知的输入处理
+        // ============================================================
+        // 关外输入处理器（原有逻辑）
+        InputHandler.init(canvas, ButtonManager, PageManager, BuildingManager, JobManager, CraftsmanManager, SoldierManager);
+
+        // 场景感知的点击处理（覆盖在关外输入之上）
+        canvas.addEventListener('click', function(e) {
+            if (SceneManager.currentScene === 'outside') return; // 关外由 InputHandler 处理
+
+            var rect = canvas.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+
+            if (SceneManager.currentScene === 'dungeon-select') {
+                handleDungeonSelectClick(x, y);
+            } else if (SceneManager.currentScene === 'exploration') {
+                handleExplorationClick(x, y, canvas.width, canvas.height);
+            } else if (SceneManager.currentScene === 'combat') {
+                handleCombatClick(x, y);
+            }
+        });
+
         // 启动游戏循环
         requestAnimationFrame(gameLoop);
     }
 
-    // 游戏主循环
+    // ============================================================
+    // 地牢选择界面点击处理
+    // ============================================================
+    function handleDungeonSelectClick(x, y) {
+        var result = DungeonSelectUI.handleClick(x, y, SoldierManager);
+        if (!result) return;
+
+        if (result.type === 'back') {
+            SceneManager.switchTo('outside');
+        } else if (result.type === 'start') {
+            // 将士兵数据转换为战斗单位格式
+            var party = [];
+            for (var i = 0; i < result.party.length; i++) {
+                var s = result.party[i];
+                party.push({
+                    id: s.id !== undefined ? s.id : i,
+                    name: s.name || ('队员' + (i + 1)),
+                    hp: s.hp || (s.stats ? s.stats.hp : 20),
+                    maxHp: s.hp || (s.stats ? s.stats.hp : 20),
+                    attack: s.attack || (s.stats ? s.stats.attack : 5),
+                    defense: s.defense || (s.stats ? s.stats.defense : 3),
+                    speed: s.speed || (s.stats ? s.stats.speed : 4),
+                    skills: s.skills || ['basic_attack', 'defend'],
+                    statusEffects: [],
+                    cooldowns: {}
+                });
+            }
+            SceneManager.switchTo('exploration', { layer: result.layer, party: party });
+        }
+    }
+
+    // ============================================================
+    // 探索界面点击处理（9.6 方向控制交互）
+    // ============================================================
+    function handleExplorationClick(clickX, clickY, canvasW, canvasH) {
+        // 根据点击位置相对 Canvas 中心判定方向
+        var centerX = canvasW / 2;
+        var centerY = canvasH / 2;
+        var dx = clickX - centerX;
+        var dy = clickY - centerY;
+
+        var direction;
+        if (Math.abs(dx) > Math.abs(dy)) {
+            direction = dx > 0 ? 'right' : 'left';
+        } else {
+            direction = dy > 0 ? 'down' : 'up';
+        }
+
+        var result = ExplorationManager.move(direction);
+        if (!result || !result.success) return;
+
+        // 探险结束（走回入口）
+        if (result.ended) {
+            var summary = result.summary;
+            if (summary && summary.preserved) {
+                // 将资源添加到关外
+                var res = summary.resources;
+                for (var key in res) {
+                    if (res[key] > 0) {
+                        ResourceManager.addResource(key, res[key]);
+                    }
+                }
+            }
+            SceneManager._saveDungeonProgress();
+            SceneManager.switchTo('outside');
+            return;
+        }
+
+        // 遭遇处理
+        if (result.encounter) {
+            var enc = result.encounter;
+            if (enc.type === 'treasure') {
+                // 自动收集宝藏
+                ExplorationManager.collectTreasure();
+            } else if (enc.type === 'monster') {
+                // 触发怪物战斗（单个怪物）
+                CombatEngine.initMonsterFight(ExplorationManager.party, enc.monsterId, ConfigLoader);
+                SceneManager.switchTo('combat', {
+                    callback: function(state) {
+                        if (state === 'victory') {
+                            var rewards = CombatEngine.getRewards();
+                            ExplorationManager.addCombatRewards(rewards);
+                            SceneManager.switchTo('exploration');
+                        } else {
+                            // 全灭：不保留资源，返回关外
+                            ExplorationManager.endExploration(true);
+                            SceneManager._saveDungeonProgress();
+                            SceneManager.switchTo('outside');
+                        }
+                    }
+                });
+            } else if (enc.type === 'boss') {
+                // 触发 Boss 战
+                CombatEngine.initBossFight(ExplorationManager.party, enc.bossId, ConfigLoader);
+                SceneManager.switchTo('combat', {
+                    callback: function(state) {
+                        if (state === 'victory') {
+                            var rewards = CombatEngine.getRewards();
+                            ExplorationManager.addCombatRewards(rewards);
+                            ProgressTracker.markLayerComplete(ExplorationManager.currentLayer);
+                            // Boss 击败后结束探险，保存资源
+                            var summary = ExplorationManager.endExploration(false);
+                            if (summary && summary.preserved) {
+                                var res = summary.resources;
+                                for (var key in res) {
+                                    if (res[key] > 0) {
+                                        ResourceManager.addResource(key, res[key]);
+                                    }
+                                }
+                            }
+                            SceneManager._saveDungeonProgress();
+                            SceneManager.switchTo('outside');
+                        } else {
+                            // Boss 战失败：不保留资源，返回关外（层级仍解锁，可重新挑战）
+                            ProgressTracker.handleBossDefeat(ExplorationManager.currentLayer);
+                            ExplorationManager.endExploration(true);
+                            SceneManager._saveDungeonProgress();
+                            SceneManager.switchTo('outside');
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    // ============================================================
+    // 战斗界面点击处理（9.5 选择技能、选择目标）
+    // ============================================================
+    function handleCombatClick(x, y) {
+        if (CombatEngine.state !== 'active') {
+            // 战斗已结束，点击任意位置触发回调
+            if (SceneManager._combatCallback) {
+                var cb = SceneManager._combatCallback;
+                SceneManager._combatCallback = null;
+                cb(CombatEngine.state);
+            }
+            return;
+        }
+
+        var result = CombatRenderer.handleClick(x, y, CombatEngine);
+        if (!result) return;
+
+        if (result.type === 'skill_selected') {
+            // 技能已选中，等待选择目标（CombatRenderer 内部记录 _selectedSkill）
+            var skillDef = ConfigLoader.getSkill(result.skillId);
+            if (skillDef && skillDef.type === 'buff') {
+                // buff 类技能直接对自身使用
+                var turnIdx = CombatEngine.currentTurn % CombatEngine.turnOrder.length;
+                var currentUnit = CombatEngine.turnOrder[turnIdx];
+                CombatEngine.executeAction(currentUnit, result.skillId, currentUnit);
+                CombatRenderer._selectedSkill = null;
+                advanceCombatTurn();
+            }
+            return;
+        }
+
+        if (result.type === 'action') {
+            // 玩家选择了技能和目标
+            var turnIdx = CombatEngine.currentTurn % CombatEngine.turnOrder.length;
+            var currentUnit = CombatEngine.turnOrder[turnIdx];
+            var target = CombatEngine.enemies[result.targetIndex];
+            if (target && target.hp > 0) {
+                CombatEngine.executeAction(currentUnit, result.skillId, target);
+                advanceCombatTurn();
+            }
+        }
+    }
+
+
+
+    // ============================================================
+    // 扩展 SaveSystem 支持地牢进度持久化（9.3）
+    // ============================================================
+    (function() {
+        var origSave = SaveSystem.save;
+        var origLoad = SaveSystem.load;
+
+        SaveSystem.save = function(resources, craftsman, jobs, buildings, soldiers) {
+            origSave.call(SaveSystem, resources, craftsman, jobs, buildings, soldiers);
+            // 在已保存的数据上追加 dungeon 字段
+            try {
+                var raw = localStorage.getItem(SaveSystem.STORAGE_KEY);
+                if (raw) {
+                    var data = JSON.parse(raw);
+                    data.dungeon = ProgressTracker.saveProgress();
+                    localStorage.setItem(SaveSystem.STORAGE_KEY, JSON.stringify(data));
+                }
+            } catch (e) { /* 静默处理 */ }
+        };
+
+        SaveSystem.load = function() {
+            var result = origLoad.call(SaveSystem);
+            // 从存档中恢复 dungeon 字段
+            try {
+                var raw = localStorage.getItem(SaveSystem.STORAGE_KEY);
+                if (raw) {
+                    var data = JSON.parse(raw);
+                    result.dungeon = data.dungeon || null;
+                }
+            } catch (e) {
+                result.dungeon = null;
+            }
+            return result;
+        };
+    })();
+
+    // ============================================================
+    // 在 Castle_Page 添加"探险"按钮（9.4）
+    // ============================================================
+    (function() {
+        var origDrawCastle = CanvasRenderer.drawCastlePage;
+        CanvasRenderer._exploreBtn = null;
+
+        CanvasRenderer.drawCastlePage = function(offsetX, resourceManager, buttonManager, now, craftsmanManager, jobManager, buildingManager, pageManager) {
+            // 调用原有绘制逻辑
+            origDrawCastle.call(CanvasRenderer, offsetX, resourceManager, buttonManager, now, craftsmanManager, jobManager, buildingManager, pageManager);
+
+            // 在训练按钮下方添加"探险"按钮
+            var ctx = CanvasRenderer.ctx;
+            var trainBtn = CanvasRenderer._trainBtn;
+            if (!trainBtn) return;
+
+            var btnX = trainBtn.x;
+            var btnY = trainBtn.y + trainBtn.height + 20;
+            var btnW = trainBtn.width;
+            var btnH = trainBtn.height;
+            CanvasRenderer._exploreBtn = { x: btnX, y: btnY, width: btnW, height: btnH };
+
+            var bx = btnX + offsetX;
+            // 按钮背景
+            ctx.fillStyle = '#1a3a2a';
+            ctx.fillRect(bx, btnY, btnW, btnH);
+            // 边框
+            ctx.strokeStyle = '#44aa66';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(bx, btnY, btnW, btnH);
+            // 文字
+            ctx.fillStyle = '#88ffaa';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('探险', bx + btnW / 2, btnY + btnH / 2);
+        };
+    })();
+
+    // ============================================================
+    // 拦截关外 Castle_Page 的"探险"按钮点击
+    // ============================================================
+    (function() {
+        var canvas = document.getElementById('gameCanvas');
+        // 使用 mouseup 事件在 capture 阶段拦截，优先于 InputHandler
+        canvas.addEventListener('mouseup', function(e) {
+            if (SceneManager.currentScene !== 'outside') return;
+            if (PageManager.showBuildingPage || PageManager.showTrainingPage) return;
+            if (PageManager.currentPage !== 0) return;
+
+            var rect = canvas.getBoundingClientRect();
+            var x = e.clientX - rect.left;
+            var y = e.clientY - rect.top;
+
+            var btn = CanvasRenderer._exploreBtn;
+            if (btn && x >= btn.x && x <= btn.x + btn.width && y >= btn.y && y <= btn.y + btn.height) {
+                SceneManager.switchTo('dungeon-select');
+            }
+        }, false);
+
+        // 触摸设备支持
+        canvas.addEventListener('touchend', function(e) {
+            if (SceneManager.currentScene !== 'outside') return;
+            if (PageManager.showBuildingPage || PageManager.showTrainingPage) return;
+            if (PageManager.currentPage !== 0) return;
+
+            var rect = canvas.getBoundingClientRect();
+            var touch = e.changedTouches[0];
+            var x = touch.clientX - rect.left;
+            var y = touch.clientY - rect.top;
+
+            var btn = CanvasRenderer._exploreBtn;
+            if (btn && x >= btn.x && x <= btn.x + btn.width && y >= btn.y && y <= btn.y + btn.height) {
+                SceneManager.switchTo('dungeon-select');
+            }
+        }, false);
+    })();
+
+    // ============================================================
+    // 游戏主循环（场景感知）
+    // ============================================================
     var lastFrameTime = 0;
     function gameLoop(timestamp) {
         var deltaTime = lastFrameTime === 0 ? 0 : timestamp - lastFrameTime;
         lastFrameTime = timestamp;
 
         var canvas = document.getElementById('gameCanvas');
-        PageManager.updateAnimation(timestamp, canvas.width);
-        JobManager.update(timestamp, ResourceManager);
+        var ctx = canvas.getContext('2d');
+
+        // 更新
+        SceneManager.update(timestamp, deltaTime);
         ToastManager.update(deltaTime);
-        CanvasRenderer.render(ResourceManager, ButtonManager, PageManager, timestamp,
-            CraftsmanManager, JobManager, BuildingManager);
-        ToastManager.render(CanvasRenderer.ctx);
+
+        // 渲染
+        SceneManager.render(ctx, canvas);
+        ToastManager.render(ctx);
+
         requestAnimationFrame(gameLoop);
     }
 

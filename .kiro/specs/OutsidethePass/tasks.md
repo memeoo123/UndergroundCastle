@@ -2,175 +2,197 @@
 
 ## Tasks
 
-- [x] 1. 创建外置配置和核心逻辑模块
-  - [x] 1.1 创建 `outside-config.js`（OUTSIDE_CONFIG_EXTERNAL：冷却、产出、Canvas、页面切换配置）_Req: 1.3, 2.4, 6.7, 6.8_
-  - [x] 1.2 创建 `outside-logic.js`（randomInt + ResourceManager：5种资源，add/hasEnough/deduct/getResources）_Req: 1.1, 2.1, 2.2, 8.1_
-  - [x] 1.3 ButtonManager（isInCooldown/getRemainingCooldown/handleClick/isPointInButton）_Req: 1.1, 1.3, 1.5, 2.1, 2.4, 2.6, 5.3_
-  - [x] 1.4 SaveSystem（save/load，处理异常和旧存档兼容）_Req: 4.1-4.3, 8.4-8.6, 9.6-9.7, 13.1-13.2_
-
-- [x] 2. 实现 PageManager 核心逻辑
-  - [x] 2.1 PageManager 状态和 getTargetOffset/shouldSwitchPage _Req: 6.1, 6.7, 6.8_
-  - [x] 2.2 startDrag/updateDrag/endDrag（含边界限制）_Req: 6.4-6.6, 6.10-6.11_
-  - [x] 2.3 updateAnimation（easeOut 缓动，动画中禁止拖拽）_Req: 6.7-6.9_
-
-- [x] 3. 实现工匠与工作岗位核心逻辑
-  - [x] 3.1 创建 `job-config.js`（JOB_CONFIG_EXTERNAL：farmer/baker/dormitory）_Req: 7.1-7.3_
-  - [x] 3.2 CraftsmanManager（totalCapacity/getAssigned/getAvailable/addCapacity/canAssign）_Req: 9.1-9.2_
-  - [x] 3.3 JobManager（init/assign/unassign/update/calculateProduction，Baker wheat不足处理）_Req: 10.1-10.4, 7.4_
-  - [x] 3.4 BuildingManager（init/canBuild/build/getBuildCounts）_Req: 11.2-11.5_
-
-- [x] 4. 实现 Canvas 渲染和双页面界面
-  - [x] 4.1 CanvasRenderer（init/render/drawCastlePage/drawKingdomPage/drawPageTitle/drawButton/drawResources/drawCooldown）_Req: 5.1-5.2, 5.4, 6.2-6.3_
-  - [x] 4.2 InputHandler（mouse/touch事件，区分拖拽和点击，按当前页面响应）_Req: 5.3, 6.4-6.6_
-  - [x] 4.3 创建 `index.html`（Canvas + 引入配置/逻辑 + initGame/gameLoop + 存档集成）_Req: 1.1-1.3, 2.1, 2.3-2.4, 3.1, 4.1-4.2, 5.1-5.2, 6.1_
-
-- [ ] 5. 设置测试环境
-  - [ ] 5.1 npm init + 安装 vitest/fast-check + 配置 test 脚本
-
-- [ ] 6. 编写核心逻辑属性测试
-  - [ ]* 6.1 Property 1: 炼金按钮产出正确性 _Validates: 1.1, 1.5_
-  - [ ]* 6.2 Property 2: 收集按钮产出范围正确性 _Validates: 2.1, 2.2, 2.6_
-  - [ ]* 6.3 Property 3: 冷却时间计算正确性 _Validates: 1.3, 1.4, 2.4, 2.5_
-  - [ ]* 6.4 Property 5: 存档读写往返一致性 _Validates: 4.1, 4.2_
-  - [ ]* 6.5 Property 6: 点击命中检测正确性 _Validates: 5.3_
-  - [ ]* 6.6 单元测试：localStorage 异常处理 + 冷却到期边界 _Req: 4.3_
-
-- [ ] 7. 编写 PageManager 属性测试
-  - [ ]* 7.1 Property 9: 页面切换阈值判断正确性 _Validates: 6.7, 6.8_
-  - [ ]* 7.2 Property 10: 动画期间拖拽锁定 _Validates: 6.9_
-  - [ ]* 7.3 Property 11: 页面偏移量边界约束 _Validates: 6.10, 6.11_
-  - [ ]* 7.4 Property 8: 拖拽跟随正确性 _Validates: 6.6_
-  - [ ]* 7.5 Property 7: 页面切换往返一致性 _Validates: 6.4, 6.5_
-
-- [ ] 8. 编写工匠与岗位属性测试
-  - [ ]* 8.1 Property 12: 配置驱动初始化正确性 _Validates: 7.2, 7.3, 7.4_
-  - [ ]* 8.2 Property 13: 扩展存档往返一致性 _Validates: 8.4, 8.5, 9.6, 9.7, 13.2_
-  - [ ]* 8.3 Property 14: 工匠不变量 _Validates: 9.1, 9.3, 9.4, 12.3, 12.4_
-  - [ ]* 8.4 Property 15: 工匠分配拒绝 _Validates: 9.5_
-  - [ ]* 8.5 Property 16: 产出时机正确性 _Validates: 10.1_
-  - [ ]* 8.6 Property 17: Farmer 产出正确性 _Validates: 10.2_
-  - [ ]* 8.7 Property 18: Baker 产出正确性 _Validates: 10.3, 10.4_
-  - [ ]* 8.8 Property 19: 建造正确性 _Validates: 11.3, 11.4, 11.5_
-  - [ ]* 8.9 单元测试：工匠与岗位边界情况 _Req: 8.6, 10.4, 11.5, 12.5, 12.6, 13.1_
-
-- [ ] 9. Checkpoint - 核心逻辑与属性测试验证
-
-- [x] 10. 扩展 CanvasRenderer 渲染新内容
-  - [x] 10.1 drawResources 显示 wheat/bread _Req: 8.2, 8.3_
-  - [x] 10.2 drawCastlePage 渲染工匠状态/岗位列表/建造按钮 _Req: 11.1, 11.6, 12.1-12.2, 12.5-12.6_
-  - [ ]* 10.3 Property 4: 资源显示一致性 _Validates: 1.2, 2.3, 3.1, 3.2_
-  - [ ]* 10.4 Property 20: 资源显示包含新资源 _Validates: 8.2, 8.3_
-
+- [x] 1. 创建外置配置和核心逻辑模块（outside-config.js, outside-logic.js: ResourceManager/ButtonManager/SaveSystem）
+- [x] 2. 实现 PageManager 核心逻辑（状态/拖拽/动画/边界）
+- [x] 3. 实现工匠与工作岗位核心逻辑（job-config.js, CraftsmanManager/JobManager/BuildingManager）
+- [x] 4. 实现 Canvas 渲染和双页面界面（CanvasRenderer/InputHandler/index.html）
+- [x] 10. 扩展 CanvasRenderer 渲染新内容（wheat/bread显示、工匠状态/岗位列表/建造按钮）
 - [x] 11. 扩展 InputHandler 和 index.html 集成新模块
-  - [x] 11.1 InputHandler 处理 Build_Button/Job +/- 按钮点击 _Req: 11.2, 12.3, 12.4_
-  - [x] 11.2 index.html 集成新模块（job-config引入/初始化/存档恢复/gameLoop/自动存档）_Req: 7.2-7.3, 10.1, 10.5, 8.4, 9.6-9.7_
-
-- [ ] 12. Final Checkpoint - 全系统验证
-
 - [x] 13. 实现 ToastManager 核心逻辑
-  - [x] 13.1 outside-config.js 添加 toast 配置 _Req: 19.1_
-  - [x] 13.2 outside-logic.js 实现 RESOURCE_NAMES + ToastManager（getConfig/addToast/addResourceToasts/update/render）_Req: 14-17, 19_
-
 - [x] 14. 集成 ToastManager 到游戏循环
-  - [x] 14.1 index.html 包装 ResourceManager.add*/deduct + JobManager.update 触发 Toast，gameLoop 集成 _Req: 14.1, 15.1, 17.1, 18.1-18.4_
+- [x] 18. 实现 Production Tick 倒计时和产出预览（getRemainingSeconds/previewProduction/drawProductionCountdown/drawProductionPreview）
+- [x] 20. 实现滚动视图和仓库显示（ScrollView/Warehouse/布局优化/滚轮+触摸滚动）
+- [x] 22. 实现建筑界面（Building_Page: PageManager状态/drawBuildingPage/render拦截/Build_Button改文字/InputHandler交互/index.html集成）
 
-- [ ] 15. Checkpoint - Toast 系统验证
+- [x] 22. 实施完毕检查点
+  - 以上所有原有功能实现任务已完成
 
-- [ ] 16. 编写 Toast 属性测试和单元测试
-  - [ ]* 16.1 Property 21: 资源变化触发 Toast 创建 _Validates: 14.1, 14.3, 15.1, 15.3_
-  - [ ]* 16.2 Property 22: Toast 文字格式与颜色正确性 _Validates: 14.2, 15.2_
-  - [ ]* 16.3 Property 23: Toast 初始位置正确性 _Validates: 16.1_
-  - [ ]* 16.4 Property 24: Toast 堆叠排列正确性 _Validates: 16.2, 16.3_
-  - [ ]* 16.5 Property 25: Toast 下降位移正确性 _Validates: 17.1_
-  - [ ]* 16.6 Property 26: Toast 透明度生命周期正确性 _Validates: 17.2, 17.4_
-  - [ ]* 16.7 Property 27: Toast 过期移除 _Validates: 17.3_
-  - [ ]* 16.8 Property 28: Toast 配置驱动 _Validates: 19.1_
-  - [ ]* 16.9 单元测试：Toast 边界情况 _Req: 14.2, 15.2, 17.1-17.3, 19.2_
+- [x] 23. 创建士兵配置文件 soldier-config.js（需重写为树形进阶体系）
+  - 已创建旧版配置，需要重写为新的树形进阶配置格式
+  - _Requirements: 25.1, 25.2, 25.4_
 
-- [ ] 17. Final Checkpoint - 全系统验证（含 Toast）
+- [-] 24. 重写 SoldierManager 核心逻辑（树形进阶体系）
+  - [x] 24.1 旧版 SoldierManager 已实现（需重写）
+    - 需要移除 upgrade 逻辑，重写 recruit 为仅招募冒险者，新增通用 promote 逻辑
+    - _Requirements: 25.3, 26.1, 26.2, 26.3, 26.5, 27.1, 27.2, 27.3, 27.4, 27.5, 27.7_
 
-- [x] 18. 实现 Production Tick 倒计时和产出预览
-  - [x] 18.1 在 JobManager 中添加 getRemainingSeconds(now) 方法
-    - lastTickTime=0 时返回完整周期秒数
-    - 正常情况返回 Math.ceil((interval - elapsed) / 1000)
-    - remaining <= 0 时返回完整周期秒数
-    - _Requirements: 20.1, 20.2, 20.3, 20.4, 20.5_
-  - [x] 18.2 在 JobManager 中添加 previewProduction(resourceManager) 方法
-    - 遍历所有有工匠的岗位，模拟一次 tick 的资源变化
-    - Baker wheat 限制与 calculateProduction 逻辑一致
-    - 累计 changes 确保多岗位间资源依赖正确
-    - 无工匠分配时返回空对象
-    - _Requirements: 21.2, 21.3, 21.7_
-  - [x] 18.3 在 CanvasRenderer 中添加 drawProductionCountdown(jobManager, now, offsetX) 方法
-    - 在工匠状态下方显示「下次产出: Ns」
-    - 淡蓝色(#aaaaff)
-    - _Requirements: 20.1, 20.4_
-  - [x] 18.4 在 CanvasRenderer 中添加 drawProductionPreview(jobManager, resourceManager, offsetX) 方法
-    - 在岗位列表下方显示资源变化预览
-    - 正数绿色(#00ff00)「+N 资源名」，负数红色(#ff4444)「-N 资源名」
-    - 零值不显示，无变化时不渲染
-    - _Requirements: 21.1, 21.4, 21.5, 21.6, 21.7_
-  - [x] 18.5 在 drawKingdomPage 中集成 drawProductionCountdown 和 drawProductionPreview 调用
-    - 在 drawCraftsmanStatus 之后调用 drawProductionCountdown
-    - 在 drawJobList 之后调用 drawProductionPreview
-    - _Requirements: 20.1, 21.1, 21.8_
-  - [ ]* 18.6 Property 29: 倒计时计算精度
-    - **Property 29: 倒计时计算精度**
-    - *For any* 有效的 now 和 lastTickTime，getRemainingSeconds 返回 Math.ceil((interval - elapsed) / 1000)
-    - **Validates: Requirements 20.4**
-  - [ ]* 18.7 Property 30: 产出预览与实际产出一致性
-    - **Property 30: 产出预览与实际产出一致性**
-    - *For any* 岗位分配和资源状态，previewProduction 的结果与实际执行一次产出的资源变化一致
-    - **Validates: Requirements 21.2, 21.3**
-  - [ ]* 18.8 单元测试：倒计时和产出预览边界情况
-    - lastTickTime=0 时倒计时返回完整周期
-    - 无工匠分配时 previewProduction 返回空对象
-    - Baker wheat=0 时 previewProduction 正确处理
-    - _Requirements: 20.2, 21.3, 21.7_
+  - [ ]* 24.2 编写士兵招募属性测试
+    - **Property 36: 招募正确性**
+    - *对任意*资源状态，仅允许招募冒险者；资源充足→soldiers+1/type='adventurer'/资源扣除；资源不足→状态不变
+    - **Validates: Requirements 26.1, 26.2, 26.3, 26.5**
 
-- [ ] 19. Checkpoint - 倒计时和产出预览验证
-  - 确保所有测试通过，如有问题请告知。
+  - [ ]* 24.3 编写士兵进阶属性测试
+    - **Property 37: 进阶正确性**
+    - *对任意*士兵和目标兵种，目标在 promoteTo 中且资源充足→type/stats 更新/资源扣除；否则→状态不变
+    - **Validates: Requirements 27.1, 27.2, 27.3, 27.4, 27.5, 27.7**
+
+- [x] 25. 扩展 SaveSystem 支持士兵数据持久化（需适配新格式，去掉 level 字段）
+  - [x] 25.1 SaveSystem.save/load 已支持 soldiers 参数
+    - 需适配新格式：士兵不再有 level 字段，只有 type/attack/defense/hp
+    - _Requirements: 28.1, 28.2, 28.3, 28.4_
+
+  - [ ]* 25.2 编写士兵存档往返属性测试
+    - **Property 38: 士兵存档往返一致**
+    - *对任意*士兵列表，save 后 load 应产生等价数据（type/attack/defense/hp）；缺失/损坏→空列表
+    - **Validates: Requirements 28.1, 28.2, 28.3, 28.4**
+
+- [x] 26. 集成士兵系统到 index.html（需适配新接口）
+  - 已集成，需适配：移除 upgrade 包装，确保 promote 包装正确
+  - _Requirements: 25.3, 26.4, 27.6, 28.1_
+
+- [x] 27. 重写 soldier-config.js 为树形进阶配置
+  - 重写 SOLDIER_CONFIG_EXTERNAL 为新格式：每个兵种含 name/tier/stats/promoteTo/promoteCost（冒险者额外含 recruitCost）
+  - 定义完整进阶树：冒险者→弓箭手/战士，弓箭手→弩手，战士→狂战士/骑士
+  - 数值为占位值，后续调整
+  - _Requirements: 25.1, 25.2_
+
+- [-] 28. 重写 SoldierManager 为树形进阶逻辑
+  - [x] 28.1 重写 recruit 为仅招募冒险者：recruit(resourceManager)，移除 typeId 参数
+    - 移除 upgrade/canUpgrade 方法
+    - 重写 promote(soldierIndex, targetTypeId, resourceManager)：检查 promoteTo 列表→检查 promoteCost→扣除→替换
+    - 重写 canPromote(soldierIndex, targetTypeId, resourceManager)
+    - 更新 canRecruit(resourceManager)：仅检查冒险者费用
+    - _Requirements: 26.1, 26.2, 26.3, 27.1, 27.2, 27.3, 27.4, 27.5, 27.7_
+
+  - [ ]* 28.2 编写招募属性测试（Property 36）
+    - **Validates: Requirements 26.1, 26.2, 26.3, 26.5**
+
+  - [ ]* 28.3 编写进阶属性测试（Property 37）
+    - **Validates: Requirements 27.1, 27.2, 27.3, 27.4, 27.5, 27.7**
+
+- [x] 29. 适配 SaveSystem 和 index.html 集成
+  - 修改 SaveSystem.save/load 去掉 level 字段，只序列化 type/attack/defense/hp
+  - 修改 index.html：移除 SoldierManager.upgrade 包装，添加 SoldierManager.promote 包装
+  - 修改 recruit 调用方式（不再传 typeId）
+  - _Requirements: 28.1, 28.2, 27.6_
+
+- [ ] 30. 检查点 - 确保树形进阶系统功能正确
+  - 确保所有测试通过，有问题请询问用户。
+
+- [x] 31. 扩展 PageManager 支持 Training_Page 和 Promote_Dialog 状态
+  - [x] 31.1 新增 PageManager 状态字段和方法
+    - 新增 showTrainingPage/trainingScrollOffset/promoteDialogOpen/promoteDialogSoldierIndex 字段
+    - 实现 openTrainingPage/closeTrainingPage/handleTrainingScroll/openPromoteDialog/closePromoteDialog 方法
+    - openTrainingPage: showTrainingPage=true, trainingScrollOffset=0, promoteDialogOpen=false
+    - closeTrainingPage: showTrainingPage=false, promoteDialogOpen=false
+    - openPromoteDialog: promoteDialogOpen=true, promoteDialogSoldierIndex=index
+    - closePromoteDialog: promoteDialogOpen=false, promoteDialogSoldierIndex=-1
+    - handleTrainingScroll: 同 handleBuildingScroll 逻辑
+    - 修改 startDrag: showTrainingPage=true 时直接 return（同 showBuildingPage 逻辑）
+    - _Requirements: 29.2, 29.3, 30.2, 33.1, 33.8_
+
+  - [ ]* 31.2 编写 Training_Page 拖拽锁定属性测试
+    - **Property 39: Training_Page 拖拽锁定**
+    - *对任意*状态，showTrainingPage=true 时 startDrag 后 isDragging=false
+    - **Validates: Requirements 29.3**
+
+- [x] 32. 实现 Castle_Page 训练按钮（Train_Button）
+  - [x] 32.1 在 drawCastlePage 中添加训练按钮渲染
+    - Train_Button 位于 Build_Button 下方（y = startY + btnSpacing * 2）
+    - 使用与 Build_Button 相同的尺寸和样式，文字为"训练"
+    - 存储按钮位置供 InputHandler 使用
+    - _Requirements: 29.1_
+
+  - [x] 32.2 在 InputHandler 中添加 Train_Button 点击处理
+    - Castle_Page 点击检测中增加 Train_Button 区域判断
+    - 点击后调用 pageManager.openTrainingPage()
+    - _Requirements: 29.2_
+
+- [x] 33. 实现 drawTrainingPage 渲染
+  - [x] 33.1 实现 Training_Page 基础布局（标题、返回按钮、招募按钮）
+    - 全屏深色背景（同 Building_Page 风格 #1a1a2e）
+    - 标题"训练" + 返回按钮（同 Building_Page 布局）
+    - 招募按钮：显示"招募冒险者" + 费用信息，canRecruit→绿色/灰色
+    - 存储 _trainingBackBtn 和 _trainingRecruitBtn 位置
+    - _Requirements: 30.1, 30.3, 31.2, 31.3_
+
+  - [x] 33.2 实现士兵列表 ScrollView 渲染
+    - 遍历 soldierManager.getSoldiers()，竖向排列 Soldier_Entry
+    - 每个条目显示：名称（从配置获取）、Tier 标记、ATK/DEF/HP 属性
+    - promoteTo 非空→显示"进阶"按钮，存储位置到 _trainingPromoteBtns[index]
+    - promoteTo 为空→显示"满阶"标记，不显示进阶按钮
+    - 滚动条（同 Building_Page 逻辑）
+    - _Requirements: 30.4, 32.1, 32.2, 32.3, 32.4_
+
+  - [ ]* 33.3 编写士兵条目信息完整性属性测试
+    - **Property 41: 士兵条目信息完整**
+    - *对任意*士兵，条目应包含名称、Tier、attack、defense、hp
+    - **Validates: Requirements 32.1, 32.2**
+
+  - [ ]* 33.4 编写进阶按钮可见性属性测试
+    - **Property 42: 进阶按钮可见性**
+    - *对任意*士兵，进阶按钮显示与否 = promoteTo 列表是否非空
+    - **Validates: Requirements 32.3, 32.4**
+
+- [x] 34. 实现 drawPromoteDialog 弹窗渲染
+  - [x] 34.1 实现进阶弹窗渲染
+    - 半透明遮罩覆盖全屏
+    - 居中弹窗面板，标题为当前士兵名称 + "进阶"
+    - 关闭按钮（右上角 X），存储位置到 _promoteDialogCloseBtn
+    - 遍历 promoteTo 列表，每个目标显示：名称、Tier、ATK/DEF/HP、进阶费用
+    - 费用：资源不足红色，充足白色
+    - 进阶按钮：canPromote→高亮绿色，否则灰色
+    - 存储按钮位置到 _promoteDialogTargetBtns[targetTypeId]
+    - _Requirements: 33.1, 33.2, 33.3, 33.4, 33.5_
+
+  - [ ]* 34.2 编写进阶弹窗目标完整性属性测试
+    - **Property 43: 进阶弹窗目标完整性**
+    - *对任意*士兵（promoteTo 非空），弹窗应列出所有目标兵种及完整信息
+    - **Validates: Requirements 33.2, 33.3**
+
+- [x] 35. 实现 Training_Page InputHandler 交互
+  - [x] 35.1 扩展 InputHandler 支持 Training_Page 交互
+    - onDown: showTrainingPage=true 且 promoteDialogOpen=false 时不启动拖拽
+    - onMove: showTrainingPage=true 时支持滚动（同 Building_Page），promoteDialogOpen=true 时忽略
+    - onUp 点击处理：
+      - promoteDialogOpen=true: 检测关闭按钮→closePromoteDialog，检测进阶按钮→promote+closePromoteDialog，其他忽略
+      - promoteDialogOpen=false: 检测返回→closeTrainingPage，检测招募→recruit，检测士兵进阶按钮→openPromoteDialog
+    - wheel: showTrainingPage=true 且 promoteDialogOpen=false → handleTrainingScroll
+    - _Requirements: 29.3, 30.2, 30.5, 31.1, 33.1, 33.6, 33.8, 33.9_
+
+  - [ ]* 35.2 编写进阶弹窗模态性属性测试
+    - **Property 44: 进阶弹窗模态性**
+    - *对任意*状态，promoteDialogOpen=true 时招募/滚动/返回操作被阻止
+    - **Validates: Requirements 33.9**
+
+- [x] 36. 集成 Training_Page 到 CanvasRenderer.render 和 index.html
+  - [x] 36.1 修改 CanvasRenderer.render 拦截逻辑
+    - 在 showBuildingPage 检查之后增加 showTrainingPage 检查
+    - showTrainingPage=true → 调用 drawTrainingPage，若 promoteDialogOpen=true 再调用 drawPromoteDialog
+    - render 方法签名增加 soldierManager 参数
+    - _Requirements: 30.6_
+
+  - [x] 36.2 修改 index.html 集成
+    - 游戏循环 render 调用传入 soldierManager
+    - recruit 包装函数中增加 Toast 触发（已有逻辑复用）
+    - promote 包装函数中增加 Toast 触发（已有逻辑复用）
+    - InputHandler.init 传入 soldierManager 参数
+    - _Requirements: 31.4, 33.7_
+
+- [ ] 37. 检查点 - 确保训练界面功能正确
+  - 确保所有测试通过，有问题请询问用户。
 
 ## Notes
 
-- `*` 标记为可选测试任务
-- 核心逻辑在 outside-logic.js，测试通过 require 导入
-- 属性测试用 fast-check，≥100 次迭代
-- 测试文件在 tests/ 目录
-- Task 1-4, 10-11, 13-14 已完成
-- Toast 集成通过 index.html 方法包装实现
-- JobManager.update 前后对比资源差异触发 Toast
-- Task 18 为新增的倒计时和产出预览功能
-
-
-- [x] 20. 实现滚动视图和仓库显示
-  - [x] 20.1 PageManager 添加 castleScrollOffset 和 kingdomScrollOffset 状态，初始化为 0 _Req: 22.2, 23.2_
-  - [x] 20.2 PageManager 添加 handleScroll(page, delta) 方法，更新对应页面的 scrollOffset _Req: 22.4, 23.3_
-  - [x] 20.3 CanvasRenderer 添加 drawWarehouse(resources, scrollOffset, offsetX) 方法 _Req: 22.1, 22.2_
-    - 绘制"仓库"标题
-    - 定义滚动区域（x, y, width, height）
-    - 根据 scrollOffset 裁剪并绘制资源列表
-    - 绘制滚动条
-  - [x] 20.4 CanvasRenderer 添加 drawJobScrollView(jobManager, craftsmanManager, scrollOffset, offsetX) 方法 _Req: 23.2_
-    - 定义滚动区域
-    - 根据 scrollOffset 裁剪并绘制工匠状态、岗位列表、产出倒计时、产出预览
-    - 绘制滚动条
-  - [x] 20.5 修改 drawCastlePage，调整布局避免重叠，集成 drawWarehouse _Req: 22.3_
-    - 炼金按钮位置：左上角
-    - 建造按钮位置：炼金按钮右侧
-    - 仓库区域：按钮下方，占据大部分空间
-  - [x] 20.6 修改 drawKingdomPage，移除资源显示，集成 drawJobScrollView _Req: 23.1, 23.5_
-    - 收集按钮位置：左上角
-    - 滚动区域：按钮下方，占据大部分空间
-  - [x] 20.7 InputHandler 添加鼠标滚轮事件处理 _Req: 22.4, 23.3_
-    - 监听 wheel 事件
-    - 根据当前页面调用 PageManager.handleScroll
-    - 阻止默认滚动行为
-  - [x] 20.8 InputHandler 添加触摸拖拽滚动支持 _Req: 22.4, 23.3_
-    - 区分页面拖拽和滚动区域拖拽
-    - 滚动区域内的垂直拖拽触发滚动
-    - 水平拖拽仍触发页面切换
-
-- [ ] 21. Checkpoint - UI 优化验证
-  - 手动测试地下城堡界面：仓库显示完整、滚动流畅、按钮不重叠
-  - 手动测试地下王国界面：岗位列表滚动流畅、无仓库显示
+- 核心逻辑在 outside-logic.js，配置在 outside-config.js / job-config.js / resource-config.js / soldier-config.js
+- 任务 1-22 为原有功能，已全部完成
+- 任务 23-26 为旧版士兵系统（已实现，需重写适配树形进阶）
+- 任务 27-30 为树形进阶体系重写
+- 任务 31-37 为训练界面（Training_Page）新增功能
+- 士兵系统不再有"升级"概念，兵种的 tier 就是等级，通过进阶获得高阶兵种
+- 只能招募冒险者（Tier 1），其他兵种通过 promote 获得
+- 进阶树：冒险者→弓箭手/战士，弓箭手→弩手，战士→狂战士/骑士
+- Training_Page 遵循 Building_Page 相同的全屏覆盖模式（PageManager 状态控制）
+- Promote_Dialog 为模态弹窗，打开时阻止 Training_Page 其他交互
+- 标记 `*` 的子任务为可选属性测试，可跳过以加速 MVP
+- 每个属性测试对应设计文档中的正确性属性编号

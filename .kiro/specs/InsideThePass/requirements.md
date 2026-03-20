@@ -18,6 +18,7 @@
 - **Treasure**: 宝藏，探索中可收集的资源和物品
 - **Dungeon**: 地牢，关内探险的场所，包含多个层级
 - **Dungeon_Layer**: 地牢层级，地牢的深度单位，每层有不同难度和奖励
+- **Teleport_Portal**: 传送阵，地牢中的传送设施，踏入时触发 Boss 战，击败后可选择传送到已解锁的层级
 - **Canvas_Renderer**: Canvas 渲染器，负责 2D 图形渲染
 - **Config_Loader**: 配置加载器，从外部 JS 文件加载配置数据
 
@@ -29,7 +30,7 @@
 
 #### Acceptance Criteria
 
-1. WHEN 玩家选择冒险者并点击派遣按钮 THEN THE Dungeon_System SHALL 将选中的冒险者加入当前探险队伍
+1. WHEN 玩家点击探险按钮 THEN THE Dungeon_System SHALL 切换到地牢选择界面，玩家可选择层级并派遣冒险者
 2. WHEN 探险队伍为空 THEN THE Dungeon_System SHALL 阻止玩家开始探险
 3. WHEN 冒险者已在其他探险中 THEN THE Dungeon_System SHALL 阻止重复派遣该冒险者
 4. WHEN 探险队伍人数达到上限 THEN THE Dungeon_System SHALL 阻止添加更多冒险者
@@ -42,13 +43,15 @@
 #### Acceptance Criteria
 
 1. WHEN 冒险者遭遇怪物 THEN THE Combat_Engine SHALL 初始化战斗并显示战斗界面
-2. WHEN 战斗回合开始 THEN THE Combat_Engine SHALL 根据速度属性决定行动顺序
-3. WHEN 单位执行攻击 THEN THE Combat_Engine SHALL 计算伤害值并更新目标生命值
-4. WHEN 单位生命值降至 0 THEN THE Combat_Engine SHALL 将该单位标记为战败
-5. WHEN 所有怪物被击败 THEN THE Combat_Engine SHALL 结束战斗并给予奖励
-6. WHEN 所有冒险者被击败 THEN THE Combat_Engine SHALL 结束战斗并返回探险失败
-7. THE Combat_Engine SHALL 从外部配置文件加载战斗行为逻辑
-8. THE Combat_Engine SHALL 支持基础攻击、技能攻击和防御行为
+2. WHEN 战斗开始 THEN THE Combat_Engine SHALL 为每个士兵和敌人初始化独立的攻击 CD 计时器，CD 时长 = 10秒 / 速度
+3. WHEN 士兵的攻击 CD 到期 THEN THE Combat_Engine SHALL 立即执行该士兵的攻击，同时释放所有可用辅助技能
+4. WHEN 士兵执行攻击 THEN THE Combat_Engine SHALL 计算伤害值（基于攻击力）并扣除敌人生命值
+5. WHEN 敌人的攻击 CD 到期 THEN THE Combat_Engine SHALL 执行敌人攻击，直接扣除我方队伍总血量
+6. THE Combat_Engine SHALL 维护我方队伍总血量（所有士兵 hp 之和），不维护单个士兵血量
+7. WHEN 我方队伍总血量降至 0 THEN THE Combat_Engine SHALL 结束战斗并返回探险失败
+8. WHEN 敌人生命值降至 0 THEN THE Combat_Engine SHALL 结束战斗并给予奖励
+9. THE Combat_Engine SHALL 从外部配置文件加载战斗行为逻辑
+10. THE Combat_Engine SHALL 支持士兵独立 CD 攻击和辅助技能（buff）自动释放
 
 ### Requirement 3: 探索机制
 
@@ -61,8 +64,9 @@
 3. WHEN 宝藏被收集 THEN THE Exploration_Manager SHALL 将宝藏添加到玩家库存并从地图移除
 4. WHEN 区域被完全探索 THEN THE Exploration_Manager SHALL 标记该区域为已完成
 5. THE Exploration_Manager SHALL 在 Canvas 上渲染地牢地图和冒险者位置
-6. THE Exploration_Manager SHALL 支持上下左右四个方向的移动
+6. WHEN 玩家点击 Canvas THEN THE Exploration_Manager SHALL 根据点击位置相对于 Canvas 中心的方向（上/下/左/右）移动冒险者一格，水平偏移绝对值大于垂直时判定为左右，否则判定为上下
 7. WHEN 冒险者移动到已探索区域 THEN THE Exploration_Manager SHALL 不触发新的遭遇事件
+8. WHEN 冒险者移动回到地牢入口 THEN THE Exploration_Manager SHALL 结束探险，保存已获取的资源并返回关外
 
 ### Requirement 4: 进度系统
 
@@ -76,18 +80,21 @@
 4. THE Progress_Tracker SHALL 持久化保存玩家的解锁进度
 5. THE Progress_Tracker SHALL 记录每层地牢的完成状态和最佳记录
 
-### Requirement 5: Boss 战
+### Requirement 5: Boss 战与传送阵
 
-**User Story:** 作为玩家，我想要挑战每层地牢的 Boss，以便获得丰厚奖励并解锁新内容。
+**User Story:** 作为玩家，我想要通过传送阵挑战 Boss 并传送到其他层级，以便获得丰厚奖励并自由探索地牢。
 
 #### Acceptance Criteria
 
-1. WHEN 冒险者到达 Boss 房间 THEN THE Dungeon_System SHALL 触发 Boss 战斗
-2. WHEN Boss 战开始 THEN THE Combat_Engine SHALL 加载 Boss 的特殊配置和行为
-3. WHEN Boss 使用特殊技能 THEN THE Combat_Engine SHALL 执行该技能的特定效果
-4. WHEN Boss 被击败 THEN THE Dungeon_System SHALL 给予特殊奖励并标记该层完成
-5. THE Dungeon_System SHALL 从外部配置文件加载 Boss 数据
-6. WHEN Boss 战失败 THEN THE Dungeon_System SHALL 允许玩家重新挑战
+1. THE Dungeon_System SHALL 在每层地牢生成一个"传送阵"（Teleport_Portal），位于距离入口最远的可达位置
+2. WHEN 冒险者到达传送阵 THEN THE Dungeon_System SHALL 触发该层的 Boss 战斗
+3. WHEN Boss 战开始 THEN THE Combat_Engine SHALL 加载 Boss 的特殊配置和行为
+4. WHEN Boss 使用特殊技能 THEN THE Combat_Engine SHALL 执行该技能的特定效果
+5. WHEN Boss 被击败 THEN THE Dungeon_System SHALL 给予特殊奖励、解锁下一层、并显示传送选择界面
+6. WHEN 传送选择界面显示 THEN THE Dungeon_System SHALL 允许玩家选择进入下一层或其他已解锁层级
+7. THE Dungeon_System SHALL 从外部配置文件加载 Boss 数据
+8. WHEN Boss 战失败 THEN THE Dungeon_System SHALL 结束探险并返回关外，玩家可从地牢选择界面重新挑战
+9. THE Dungeon_System SHALL 在传送阵位置渲染特殊的传送阵图标（区别于普通地块）
 
 ### Requirement 6: 配置外置化
 
@@ -151,3 +158,22 @@
 3. WHEN 冒险者生命值低于 30% THEN THE Dungeon_System SHALL 以警告颜色显示生命条
 4. WHEN 冒险者获得状态效果 THEN THE Dungeon_System SHALL 显示状态图标和剩余回合数
 5. THE Dungeon_System SHALL 在战斗界面显示冒险者的可用技能和冷却时间
+
+### Requirement 11: 资源层系统
+
+**User Story:** 作为玩家，我想要每隔5层进入一个特殊的资源层，以便采集矿产资源来支持城堡建设。
+
+#### Acceptance Criteria
+
+1. WHEN 层级编号为 5 的倍数（5, 10, 15...）THEN THE Dungeon_System SHALL 生成资源层而非普通战斗层
+2. THE Dungeon_System SHALL 为资源层使用固定的预设地图布局，而非随机生成
+3. THE Dungeon_System SHALL 在资源层中放置矿产设施（如木厂、石头矿、铁矿、金矿等）
+4. WHEN 玩家到达矿产设施位置 THEN THE Dungeon_System SHALL 允许玩家采集该矿产资源
+5. WHEN 矿产被采集 THEN THE Dungeon_System SHALL 将资源添加到本次探险累计资源中
+6. THE Dungeon_System SHALL 根据资源层深度配置不同的矿产类型：
+   - 第 5 层资源层：木厂（产出木头）、石头矿（产出石头）
+   - 第 10 层资源层：铁矿（产出铁）、金矿（产出金矿石）
+   - 更深层资源层：更高级矿产（水晶矿、符文矿等）
+7. THE Dungeon_System SHALL 资源层无怪物和 Boss，玩家可安全采集
+8. THE Dungeon_System SHALL 从外部配置文件加载资源层地图和矿产配置
+9. WHEN 玩家完成资源层采集并返回入口 THEN THE Dungeon_System SHALL 自动解锁下一层（无需击败 Boss）
