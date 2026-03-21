@@ -1,8 +1,16 @@
-// combat-config.js — 战斗行为外置配置
+// combat-config.js — 战斗行为外置配置（减法公式）
 var COMBAT_CONFIG_EXTERNAL = {
+    // 减法伤害公式参数
     damageFormula: {
-        base: 'attack - defense',
-        minDamage: 1
+        type: 'subtraction',           // 减法公式：max(D_min, (攻击-防御)*人数)
+        D_min: 1,                      // 伤害下限
+        skillMultiplierDefault: 1.0    // 默认技能倍率
+    },
+    // ATB 常数
+    atb: {
+        atb_max: 10000,                // ATB 时间条满值
+        speed_baseline: 10,            // 基准速度：速度=10 时 1秒满条
+        atb_speed_factor: 1000         // 每秒增量 = 速度 × 此系数
     },
     skills: {
         basic_attack: {

@@ -35,9 +35,10 @@ var ConfigLoader = {
             monsters: {
                 slime: {
                     name: '史莱姆',
-                    stats: { hp: 10, attack: 2, defense: 1, speed: 3 },
+                    tier: 1,
+                    stats: { hp: 320, attack: 54, defense: 20, speed: 8 },
                     skills: ['basic_attack'],
-                    rewards: { gold: { min: 1, max: 3 }, exp: 5 }
+                    rewards: { gold: { min: 3, max: 8 }, exp: 10 }
                 }
             }
         },
@@ -45,14 +46,16 @@ var ConfigLoader = {
             bosses: {
                 goblin_king: {
                     name: '哥布林王',
-                    stats: { hp: 100, attack: 12, defense: 5, speed: 5 },
-                    skills: ['basic_attack', 'power_strike'],
-                    rewards: { gold: { min: 50, max: 100 }, exp: 100, items: [] }
+                    tier: 1,
+                    stats: { hp: 800, attack: 54, defense: 20, speed: 10 },
+                    skills: ['basic_attack', 'power_strike', 'war_cry'],
+                    rewards: { gold: { min: 20, max: 50 }, exp: 50, items: [{ resource: 'iron', amount: 3 }] }
                 }
             }
         },
         combat: {
-            damageFormula: { base: 'attack - defense', minDamage: 1 },
+            damageFormula: { type: 'subtraction', D_min: 1, skillMultiplierDefault: 1.0 },
+            atb: { atb_max: 10000, speed_baseline: 10, atb_speed_factor: 1000 },
             skills: {
                 basic_attack: {
                     name: '普通攻击',
@@ -120,6 +123,27 @@ var ConfigLoader = {
         return this.dungeonConfig.maxPartySize || this._defaults.dungeon.maxPartySize;
     },
 
+    /**
+     * 根据选择的层级获取最大上阵人数
+     * 遍历 partySizeByLayer 配置，找到 <= layerId 的最大阈值对应的 size
+     * @param {number} layerId
+     * @returns {number}
+     */
+    getMaxPartySizeForLayer: function(layerId) {
+        if (!this.dungeonConfig) this.loadAll();
+        var table = this.dungeonConfig.partySizeByLayer;
+        if (!table || !Array.isArray(table) || table.length === 0) {
+            return this.getMaxPartySize();
+        }
+        var result = table[0].size || 1;
+        for (var i = 0; i < table.length; i++) {
+            if (layerId >= table[i].layer) {
+                result = table[i].size;
+            }
+        }
+        return result;
+    },
+
     getEntrance: function() {
         if (!this.dungeonConfig) this.loadAll();
         return this.dungeonConfig.entrance || this._defaults.dungeon.entrance;
@@ -134,6 +158,37 @@ var ConfigLoader = {
         if (!this.combatConfig) this.loadAll();
         var effects = this.combatConfig.statusEffects || this._defaults.combat.statusEffects;
         return effects[effectId] || null;
+    },
+
+    /**
+     * 判断指定层级是否为资源层（固定层）
+     * 资源层每5层出现一次：第5层、第10层、第15层……
+     * @param {number} layerId
+     * @returns {boolean}
+     */
+    isResourceLayer: function(layerId) {
+        if (!this.dungeonConfig) this.loadAll();
+        // 优先使用配置中的判断方法
+        if (this.dungeonConfig.isResourceLayer) {
+            return this.dungeonConfig.isResourceLayer(layerId);
+        }
+        // 默认：每5层为资源层
+        return layerId > 0 && layerId % 5 === 0;
+    },
+
+    /**
+     * 获取资源层配置
+     * @param {number} layerId
+     * @returns {object|null}
+     */
+    getResourceLayer: function(layerId) {
+        if (!this.dungeonConfig) this.loadAll();
+        if (this.dungeonConfig.getResourceLayer) {
+            return this.dungeonConfig.getResourceLayer(layerId);
+        }
+        var rl = this.dungeonConfig.resourceLayers;
+        if (rl) return rl[layerId] || null;
+        return null;
     }
 };
 
@@ -146,16 +201,78 @@ var DungeonMap = {
     height: 50,
     tiles: [],       // [y][x]
     entrance: { x: 25, y: 25 },
-    bossPos: null,
+    portalPos: null,
+    bossPos: null,  // 兼容旧引用，指向 portalPos
 
     init: function(layerId, config) {
         config = config || ConfigLoader;
+        // 检查是否为资源层
+        if (config.isResourceLayer && config.isResourceLayer(layerId)) {
+            var rlCfg = config.getResourceLayer(layerId);
+            if (rlCfg) {
+                this.initResourceLayer(rlCfg);
+                return;
+            }
+        }
         this.width = config.getMapWidth();
         this.height = config.getMapHeight();
         this.entrance = config.getEntrance();
         var layerCfg = config.getDungeonLayer(layerId);
         if (!layerCfg) layerCfg = config._defaults.dungeon.layers[1];
         this._generate(layerCfg);
+    },
+
+    /**
+     * 初始化资源层（固定布局地图）
+     * @param {object} rlCfg - 资源层配置 { mapWidth, mapHeight, entrance, facilities, walls }
+     */
+    initResourceLayer: function(rlCfg) {
+        var w = rlCfg.mapWidth || 20;
+        var h = rlCfg.mapHeight || 20;
+        var entrance = rlCfg.entrance || { x: Math.floor(w / 2), y: Math.floor(h / 2) };
+
+        this.width = w;
+        this.height = h;
+        this.entrance = { x: entrance.x, y: entrance.y };
+        this.portalPos = null;
+        this.bossPos = null;
+
+        // 初始化全空地图
+        this.tiles = [];
+        for (var y = 0; y < h; y++) {
+            this.tiles[y] = [];
+            for (var x = 0; x < w; x++) {
+                this.tiles[y][x] = { type: 'empty', content: null, explored: false };
+            }
+        }
+
+        // 设置入口
+        this.tiles[entrance.y][entrance.x].type = 'entrance';
+
+        // 放置固定墙壁
+        var walls = rlCfg.walls || [];
+        for (var i = 0; i < walls.length; i++) {
+            var wx = walls[i].x, wy = walls[i].y;
+            if (this.isInBounds(wx, wy) && !(wx === entrance.x && wy === entrance.y)) {
+                this.tiles[wy][wx].type = 'wall';
+            }
+        }
+
+        // 放置矿产设施
+        var facilities = rlCfg.facilities || [];
+        for (var i = 0; i < facilities.length; i++) {
+            var f = facilities[i];
+            if (this.isInBounds(f.x, f.y) && this.tiles[f.y][f.x].type !== 'wall' && !(f.x === entrance.x && f.y === entrance.y)) {
+                this.tiles[f.y][f.x].content = {
+                    type: 'facility',
+                    facilityType: f.type,
+                    name: f.name,
+                    resource: f.resource,
+                    amount: f.amount,
+                    collected: false
+                };
+            }
+        }
     },
 
     _generate: function(layerCfg) {
@@ -199,22 +316,23 @@ var DungeonMap = {
         // 重新 BFS 确保全图连通
         reachable = this._bfs(ex, ey);
 
-        // Step 5: 找距入口最远的可达位置放 Boss
+        // Step 5: 找距入口最远的可达位置放传送阵（portal）
         var maxDist = 0;
-        var bossX = ex, bossY = ey;
+        var portalX = ex, portalY = ey;
         var dist = this._bfsDist(ex, ey);
         for (var y = 0; y < h; y++) {
             for (var x = 0; x < w; x++) {
                 if (reachable[y][x] && dist[y][x] > maxDist && this.tiles[y][x].type === 'empty') {
                     maxDist = dist[y][x];
-                    bossX = x;
-                    bossY = y;
+                    portalX = x;
+                    portalY = y;
                 }
             }
         }
-        this.tiles[bossY][bossX].type = 'boss';
-        this.tiles[bossY][bossX].content = { type: 'boss', bossId: layerCfg.bossId };
-        this.bossPos = { x: bossX, y: bossY };
+        this.tiles[portalY][portalX].type = 'portal';
+        this.tiles[portalY][portalX].content = { type: 'portal', bossId: layerCfg.bossId };
+        this.portalPos = { x: portalX, y: portalY };
+        this.bossPos = this.portalPos;  // 兼容旧引用
 
         // Step 6: 在可达空地上放置怪物
         var monsterDensity = layerCfg.monsterDensity || 0.05;
@@ -538,21 +656,34 @@ var CombatEngine = {
     elapsedTime: 0,       // 战斗经过时间（秒）
     isBossFight: false,
     _configLoader: null,
-    _baseCDTime: 10,      // 基础 CD 时间（秒）
+
+    // ATB CD 计算：attackCD = speed_baseline / speed（秒）
+    // speed_baseline 默认10，即 speed=10 时 1秒1刀
+    _getAttackCD: function(speed) {
+        var config = this._configLoader || ConfigLoader;
+        if (!config.combatConfig) config.loadAll();
+        var cfg = config.combatConfig || config._defaults.combat;
+        var atb = cfg.atb || {};
+        var baseline = atb.speed_baseline || (cfg.speed_baseline) || 10;
+        return baseline / (speed || 1);
+    },
 
     // 创建士兵单位
     _makeAlly: function(source) {
         var attack = source.attack !== undefined ? source.attack : (source.stats ? source.stats.attack : 0);
+        var defense = source.defense !== undefined ? source.defense : (source.stats ? source.stats.defense : 0);
         var speed = source.speed !== undefined ? source.speed : (source.stats ? source.stats.speed : 1);
         var hp = source.hp !== undefined ? source.hp : (source.stats ? source.stats.hp : 0);
+        var cd = this._getAttackCD(speed);
         
         return {
             name: source.name || '士兵',
             attack: attack,
+            defense: defense,
             speed: speed,
             skills: (source.skills || []).slice(),
-            attackCD: this._baseCDTime / speed,
-            currentCD: this._baseCDTime / speed,  // 初始 CD 满，需要等待
+            attackCD: cd,
+            currentCD: cd,  // 初始 CD 满，需要等待
             statusEffects: [],
             _sourceHP: hp  // 保存原始 hp 用于计算队伍总血量
         };
@@ -562,16 +693,19 @@ var CombatEngine = {
     _makeEnemy: function(source) {
         var hp = source.hp !== undefined ? source.hp : (source.stats ? source.stats.hp : 0);
         var attack = source.attack !== undefined ? source.attack : (source.stats ? source.stats.attack : 0);
+        var defense = source.defense !== undefined ? source.defense : (source.stats ? source.stats.defense : 0);
         var speed = source.speed !== undefined ? source.speed : (source.stats ? source.stats.speed : 1);
+        var cd = this._getAttackCD(speed);
         
         return {
             name: source.name || '敌人',
             hp: hp,
             maxHp: hp,
             attack: attack,
+            defense: defense,
             speed: speed,
-            attackCD: this._baseCDTime / speed,
-            currentCD: this._baseCDTime / speed,  // 初始 CD 满，需要等待
+            attackCD: cd,
+            currentCD: cd,  // 初始 CD 满，需要等待
             _monsterId: source._monsterId || null,
             _bossId: source._bossId || null
         };
@@ -678,11 +812,14 @@ var CombatEngine = {
         this.combatLog.push(msg);
     },
 
-    // 伤害计算
+    // 伤害计算 — 减法公式：先攻防差再乘人数
+    // 我方攻击：damage = max(D_min, (allyAttack - enemyDefense) * partyCount)
+    // 敌方攻击：damage = max(D_min, enemyAttack - allyDefense)
+    //   allyDefense = 队伍中最高防御值（敌人打整个队伍血池）
     calculateDamage: function(attacker, isAlly) {
         var config = this._configLoader || ConfigLoader;
         var formula = config.getDamageFormula();
-        var minDamage = formula.minDamage || 1;
+        var minDamage = formula.D_min || formula.minDamage || 1;
 
         var attackPower = attacker.attack || 0;
         
@@ -696,9 +833,33 @@ var CombatEngine = {
             }
         }
 
-        var damage = attackPower;
-        if (damage < minDamage) damage = minDamage;
+        var damage;
+        if (isAlly) {
+            // 我方士兵攻击敌人：(allyAttack - enemyDefense) * partyCount
+            var enemyDef = (this.enemy && this.enemy.defense) || 0;
+            var partyCount = this.allies.length || 1;
+            var diff = attackPower - enemyDef;
+            damage = diff * partyCount;
+        } else {
+            // 敌人攻击队伍：enemyAttack - allyDefense（取队伍最高防御）
+            var bestDef = 0;
+            for (var i = 0; i < this.allies.length; i++) {
+                var allyDef = this.allies[i].defense || 0;
+                // 考虑防御 buff
+                if (this.allies[i].statusEffects) {
+                    for (var j = 0; j < this.allies[i].statusEffects.length; j++) {
+                        var eff = this.allies[i].statusEffects[j];
+                        if (eff.effect && eff.effect.stat === 'defense') {
+                            allyDef += (eff.effect.bonus || 0);
+                        }
+                    }
+                }
+                if (allyDef > bestDef) bestDef = allyDef;
+            }
+            damage = attackPower - bestDef;
+        }
 
+        if (damage < minDamage) damage = minDamage;
         return damage;
     },
 
@@ -840,6 +1001,7 @@ var ExplorationManager = {
     collectedTreasures: [],  // 本次探险收集的宝藏明细
     combatRewards: [],       // 本次探险战斗奖励明细
     _started: false,         // 是否已离开入口（防止刚进入就触发结束）
+    _isResourceLayer: false, // 是否为资源层
     _dungeonMap: null,
     _fogOfWar: null,
     _configLoader: null,
@@ -912,6 +1074,7 @@ var ExplorationManager = {
         this.collectedTreasures = [];
         this.combatRewards = [];
         this._started = false;
+        this._isResourceLayer = this._configLoader.isResourceLayer ? this._configLoader.isResourceLayer(layer) : false;
 
         var entrance = this._configLoader.getEntrance();
         this.playerPos = { x: entrance.x, y: entrance.y };
@@ -1025,6 +1188,10 @@ var ExplorationManager = {
             return { type: 'monster', monsterId: tile.content.monsterId };
         }
 
+        if (tile.content.type === 'portal') {
+            return { type: 'portal', bossId: tile.content.bossId };
+        }
+
         if (tile.content.type === 'boss') {
             return { type: 'boss', bossId: tile.content.bossId };
         }
@@ -1032,6 +1199,11 @@ var ExplorationManager = {
         // 宝藏不算遭遇，但返回提示
         if (tile.content.type === 'treasure') {
             return { type: 'treasure', items: tile.content.items };
+        }
+
+        // 矿产设施返回提示
+        if (tile.content.type === 'facility' && !tile.content.collected) {
+            return { type: 'facility', name: tile.content.name, resource: tile.content.resource, amount: tile.content.amount };
         }
 
         return null;
@@ -1067,6 +1239,40 @@ var ExplorationManager = {
         tile.content = null;
 
         return { success: true, items: items };
+    },
+
+    /**
+     * 采集当前位置的矿产设施
+     * @returns {{ success: boolean, resource?: string, amount?: number, name?: string, reason?: string }}
+     */
+    collectFacility: function() {
+        var map = this._dungeonMap || DungeonMap;
+        var tile = map.getTile(this.playerPos.x, this.playerPos.y);
+
+        if (!tile || !tile.content || tile.content.type !== 'facility') {
+            return { success: false, reason: 'no_facility' };
+        }
+
+        if (tile.content.collected) {
+            return { success: false, reason: 'already_collected' };
+        }
+
+        var resource = tile.content.resource;
+        var amountCfg = tile.content.amount;
+        var amount;
+        if (amountCfg && typeof amountCfg === 'object' && amountCfg.min !== undefined) {
+            amount = Math.floor(Math.random() * (amountCfg.max - amountCfg.min + 1)) + amountCfg.min;
+        } else {
+            amount = amountCfg || 0;
+        }
+
+        // 添加到累计资源
+        this.collectedResources[resource] = (this.collectedResources[resource] || 0) + amount;
+
+        // 标记为已采集
+        tile.content.collected = true;
+
+        return { success: true, resource: resource, amount: amount, name: tile.content.name };
     },
 
     /**
@@ -1180,8 +1386,24 @@ var DungeonRenderer = {
         monster: '#ff6644',
         treasure: '#ffaa00',
         bossIcon: '#ff2222',
+        portal: '#9944ff',
+        portalIcon: '#cc88ff',
         grid: '#1a1a2a',
-        explored: '#333344'
+        explored: '#333344',
+        // 矿产设施颜色
+        facility: '#2a6a2a',
+        facilityCollected: '#1a3a1a',
+        facilityIcons: {
+            lumber_mill: '#8B4513',
+            stone_mine: '#808080',
+            iron_mine: '#B0B0B0',
+            gold_mine: '#FFD700',
+            steel_forge: '#4682B4',
+            crystal_mine: '#00CED1',
+            rune_altar: '#9370DB',
+            darksteel_vein: '#2F4F4F',
+            _default: '#44aa44'
+        }
     },
 
     render: function(ctx, canvas, dungeonMap, fogOfWar, playerPos, party, collectedResources) {
@@ -1209,7 +1431,9 @@ var DungeonRenderer = {
         ctx.font = 'bold 18px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText('地牢探索 - 第 ' + (ExplorationManager.currentLayer || 1) + ' 层', mapAreaW / 2, 8);
+        var titleText = '地牢探索 - 第 ' + (ExplorationManager.currentLayer || 1) + ' 层';
+        if (ExplorationManager._isResourceLayer) titleText += ' (资源层)';
+        ctx.fillText(titleText, mapAreaW / 2, 8);
 
         // 绘制地图网格
         for (var y = 0; y < dungeonMap.height; y++) {
@@ -1257,6 +1481,9 @@ var DungeonRenderer = {
             case 'boss':
                 ctx.fillStyle = tile.explored ? this.colors.explored : this.colors.boss;
                 break;
+            case 'portal':
+                ctx.fillStyle = tile.explored ? this.colors.explored : this.colors.portal;
+                break;
             default:
                 ctx.fillStyle = tile.explored ? this.colors.explored : this.colors.empty;
         }
@@ -1299,6 +1526,44 @@ var DungeonRenderer = {
                 ctx.moveTo(px + ts / 2, py + ts * 0.3);
                 ctx.lineTo(px + ts / 2, py + ts * 0.7);
                 ctx.stroke();
+            } else if (tile.content.type === 'portal' && !tile.explored) {
+                // 传送阵：紫色旋涡（同心圆 + 中心点）
+                ctx.strokeStyle = this.colors.portalIcon;
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(px + ts / 2, py + ts / 2, ts * 0.35, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.arc(px + ts / 2, py + ts / 2, ts * 0.2, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.fillStyle = this.colors.portalIcon;
+                ctx.beginPath();
+                ctx.arc(px + ts / 2, py + ts / 2, ts * 0.1, 0, Math.PI * 2);
+                ctx.fill();
+            } else if (tile.content.type === 'facility') {
+                // 矿产设施：根据类型使用不同颜色的方块 + 中心标记
+                var fType = tile.content.facilityType || '_default';
+                var fColor = (this.colors.facilityIcons && this.colors.facilityIcons[fType])
+                    ? this.colors.facilityIcons[fType] : (this.colors.facilityIcons._default || '#44aa44');
+                if (tile.content.collected) {
+                    // 已采集：暗色 + 勾号
+                    ctx.fillStyle = this.colors.facilityCollected || '#1a3a1a';
+                    ctx.fillRect(px + ts * 0.1, py + ts * 0.1, ts * 0.8, ts * 0.8);
+                    ctx.strokeStyle = '#556655';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.moveTo(px + ts * 0.25, py + ts * 0.5);
+                    ctx.lineTo(px + ts * 0.45, py + ts * 0.7);
+                    ctx.lineTo(px + ts * 0.75, py + ts * 0.3);
+                    ctx.stroke();
+                } else {
+                    // 未采集：彩色方块
+                    ctx.fillStyle = fColor;
+                    ctx.fillRect(px + ts * 0.1, py + ts * 0.1, ts * 0.8, ts * 0.8);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(px + ts * 0.1, py + ts * 0.1, ts * 0.8, ts * 0.8);
+                }
             }
         }
 
@@ -1461,15 +1726,28 @@ var DungeonSelectUI = {
 
         var config = ConfigLoader;
         var layers = config.dungeonConfig ? config.dungeonConfig.layers : config._defaults.dungeon.layers;
-        var layerIds = Object.keys(layers);
+        var layerIds = Object.keys(layers).map(function(k) { return parseInt(k); });
+
+        // 合并资源层到列表中
+        var resourceLayers = (config.dungeonConfig && config.dungeonConfig.resourceLayers) ? config.dungeonConfig.resourceLayers : {};
+        var rlIds = Object.keys(resourceLayers).map(function(k) { return parseInt(k); });
+        for (var ri = 0; ri < rlIds.length; ri++) {
+            if (layerIds.indexOf(rlIds[ri]) === -1) {
+                layerIds.push(rlIds[ri]);
+            }
+        }
+        layerIds.sort(function(a, b) { return a - b; });
 
         for (var i = 0; i < layerIds.length; i++) {
-            var lid = parseInt(layerIds[i]);
-            var layerCfg = layers[lid];
+            var lid = layerIds[i];
+            var isRL = config.isResourceLayer ? config.isResourceLayer(lid) : false;
+            var layerCfg = isRL ? resourceLayers[lid] : layers[lid];
+            if (!layerCfg) continue;
             var unlocked = progressTracker.isLayerUnlocked(lid);
             var completed = progressTracker.completedLayers.indexOf(lid) !== -1;
+            var reached = isRL && progressTracker.layerProgress[lid] && progressTracker.layerProgress[lid].reached;
 
-            var by = currentY + i * (btnH + gap);
+            var by = currentY + this._layerButtons.length * (btnH + gap);
             if (by + btnH > y + height) break;
 
             // 按钮背景
@@ -1492,16 +1770,21 @@ var DungeonSelectUI = {
             ctx.fillStyle = unlocked ? '#eeeeee' : '#555555';
             ctx.font = 'bold 13px sans-serif';
             ctx.textAlign = 'left';
-            ctx.fillText('第 ' + lid + ' 层: ' + (layerCfg.name || '未知'), x + 10, by + 8);
+            var nameLabel = '第 ' + lid + ' 层: ' + (layerCfg.name || '未知');
+            if (isRL) nameLabel += ' [资源层]';
+            ctx.fillText(nameLabel, x + 10, by + 8);
 
             // 状态标签
             ctx.font = '11px sans-serif';
-            if (completed) {
+            if (isRL && reached) {
+                ctx.fillStyle = '#44cc88';
+                ctx.fillText('已到达 ✓', x + 10, by + 28);
+            } else if (completed) {
                 ctx.fillStyle = '#44cc44';
                 ctx.fillText('已通关 ✓', x + 10, by + 28);
             } else if (unlocked) {
-                ctx.fillStyle = '#aaaacc';
-                ctx.fillText('可挑战', x + 10, by + 28);
+                ctx.fillStyle = isRL ? '#88ccaa' : '#aaaacc';
+                ctx.fillText(isRL ? '可探索' : '可挑战', x + 10, by + 28);
             } else {
                 ctx.fillStyle = '#555555';
                 ctx.fillText('🔒 未解锁', x + 10, by + 28);
@@ -1647,6 +1930,13 @@ var DungeonSelectUI = {
             var btn = this._layerButtons[i];
             if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
                 this.selectedLayer = btn.layerId;
+                // 动态更新上阵人数上限
+                var newMax = ConfigLoader.getMaxPartySizeForLayer(btn.layerId);
+                this.maxPartySize = newMax;
+                // 如果当前队伍超出新上限，截断
+                while (this.selectedParty.length > newMax) {
+                    this.selectedParty.pop();
+                }
                 return { type: 'layer_selected', layerId: btn.layerId };
             }
         }
@@ -1726,6 +2016,148 @@ var DungeonSelectUI = {
 
 // ============================================================
 // CombatRenderer（战斗渲染器）
+// ============================================================
+// PortalSelectUI（传送选择界面）
+// ============================================================
+var PortalSelectUI = {
+    visible: false,
+    currentLayer: 1,
+    unlockedLayers: [],
+    _layerButtons: [],   // { x, y, w, h, layerId }
+    _backButton: null,   // { x, y, w, h } — 返回关外
+    _callback: null,     // function(layerId) or null for back
+
+    /**
+     * 显示传送选择界面
+     * @param {number} currentLayer - 当前层级
+     * @param {array} unlockedLayers - 已解锁层级列表
+     * @param {function} callback - 选择回调 callback(layerId) 或 callback(null) 表示返回关外
+     */
+    show: function(currentLayer, unlockedLayers, callback) {
+        this.visible = true;
+        this.currentLayer = currentLayer;
+        this.unlockedLayers = (unlockedLayers || []).slice().sort(function(a, b) { return a - b; });
+        this._callback = callback;
+        this._layerButtons = [];
+        this._backButton = null;
+    },
+
+    hide: function() {
+        this.visible = false;
+        this._callback = null;
+    },
+
+    render: function(ctx, canvas) {
+        if (!this.visible) return;
+
+        var w = canvas.width, h = canvas.height;
+
+        // 半透明背景遮罩
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+        ctx.fillRect(0, 0, w, h);
+
+        // 标题
+        ctx.fillStyle = '#cc88ff';
+        ctx.font = 'bold 24px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText('传送阵', w / 2, 30);
+
+        ctx.fillStyle = '#aaaacc';
+        ctx.font = '14px sans-serif';
+        ctx.fillText('Boss 已击败，选择传送目标', w / 2, 62);
+
+        // 层级按钮列表
+        this._layerButtons = [];
+        var btnW = 280;
+        var btnH = 44;
+        var gap = 8;
+        var nextLayer = this.currentLayer + 1;
+
+        // 构建可选层级列表：下一层 + 已解锁层级（去重，排序）
+        var options = [];
+        // 下一层始终在最前面
+        options.push({ layerId: nextLayer, label: '第 ' + nextLayer + ' 层（下一层）', isNext: true });
+        // 其他已解锁层级
+        for (var i = 0; i < this.unlockedLayers.length; i++) {
+            var lid = this.unlockedLayers[i];
+            if (lid !== nextLayer) {
+                options.push({ layerId: lid, label: '第 ' + lid + ' 层', isNext: false });
+            }
+        }
+
+        var totalH = options.length * (btnH + gap) + 60; // +60 for back button
+        var startY = Math.max(90, (h - totalH) / 2);
+
+        for (var i = 0; i < options.length; i++) {
+            var opt = options[i];
+            var bx = (w - btnW) / 2;
+            var by = startY + i * (btnH + gap);
+
+            // 按钮背景
+            ctx.fillStyle = opt.isNext ? '#2a1a4a' : '#1a1a3a';
+            ctx.fillRect(bx, by, btnW, btnH);
+
+            // 边框
+            ctx.strokeStyle = opt.isNext ? '#9944ff' : '#555588';
+            ctx.lineWidth = opt.isNext ? 2 : 1;
+            ctx.strokeRect(bx, by, btnW, btnH);
+
+            // 文字
+            ctx.fillStyle = opt.isNext ? '#cc88ff' : '#aaaacc';
+            ctx.font = opt.isNext ? 'bold 15px sans-serif' : '14px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(opt.label, w / 2, by + btnH / 2);
+
+            this._layerButtons.push({ x: bx, y: by, w: btnW, h: btnH, layerId: opt.layerId });
+        }
+
+        // 返回关外按钮
+        var backY = startY + options.length * (btnH + gap) + 10;
+        var backW = 180;
+        var backX = (w - backW) / 2;
+        ctx.fillStyle = '#3a2222';
+        ctx.fillRect(backX, backY, backW, btnH);
+        ctx.strokeStyle = '#886666';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(backX, backY, backW, btnH);
+        ctx.fillStyle = '#ddaaaa';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('返回关外', w / 2, backY + btnH / 2);
+        this._backButton = { x: backX, y: backY, w: backW, h: btnH };
+    },
+
+    handleClick: function(x, y) {
+        if (!this.visible) return null;
+
+        // 层级按钮
+        for (var i = 0; i < this._layerButtons.length; i++) {
+            var btn = this._layerButtons[i];
+            if (x >= btn.x && x <= btn.x + btn.w && y >= btn.y && y <= btn.y + btn.h) {
+                this.visible = false;
+                if (this._callback) this._callback(btn.layerId);
+                return { type: 'teleport', layerId: btn.layerId };
+            }
+        }
+
+        // 返回关外按钮
+        if (this._backButton) {
+            var b = this._backButton;
+            if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+                this.visible = false;
+                if (this._callback) this._callback(null);
+                return { type: 'back' };
+            }
+        }
+
+        return null;
+    }
+};
+
+
 // ============================================================
 // CombatRenderer（战斗渲染器 - 独立 CD 制）
 // ============================================================
@@ -1994,6 +2426,7 @@ if (typeof module !== 'undefined' && module.exports) {
         ExplorationManager: ExplorationManager,
         DungeonRenderer: DungeonRenderer,
         CombatRenderer: CombatRenderer,
-        DungeonSelectUI: DungeonSelectUI
+        DungeonSelectUI: DungeonSelectUI,
+        PortalSelectUI: PortalSelectUI
     };
 }

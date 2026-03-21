@@ -1,84 +1,101 @@
-// boss-config.js — Boss 外置配置
+// boss-config.js — Boss 外置配置（基于标准敌人表-10阶-减法，血量约2.5倍普通怪）
 var BOSS_CONFIG_EXTERNAL = {
     bosses: {
+        // 1阶 Boss（第1层）
         goblin_king: {
             name: '哥布林王',
-            stats: { hp: 100, attack: 12, defense: 5, speed: 5 },
+            tier: 1,
+            stats: { hp: 800, attack: 54, defense: 20, speed: 10 },
             skills: ['basic_attack', 'power_strike', 'war_cry'],
             rewards: {
-                gold: { min: 50, max: 100 },
-                exp: 100,
+                gold: { min: 20, max: 50 },
+                exp: 50,
+                items: [{ resource: 'iron', amount: 3 }]
+            }
+        },
+        // 2阶 Boss（第2层）
+        shadow_lord: {
+            name: '暗影领主',
+            tier: 2,
+            stats: { hp: 3340, attack: 89, defense: 33, speed: 10 },
+            skills: ['basic_attack', 'power_strike', 'war_cry'],
+            rewards: {
+                gold: { min: 50, max: 120 },
+                exp: 150,
                 items: [{ resource: 'crystal', amount: 3 }]
             }
         },
-        shadow_lord: {
-            name: '暗影领主',
-            stats: { hp: 200, attack: 18, defense: 8, speed: 6 },
-            skills: ['basic_attack', 'power_strike', 'war_cry'],
-            rewards: {
-                gold: { min: 100, max: 200 },
-                exp: 250,
-                items: [{ resource: 'rune', amount: 5 }]
-            }
-        },
+        // 3阶 Boss（第3层）
         mushroom_king: {
             name: '蘑菇王',
-            stats: { hp: 280, attack: 22, defense: 10, speed: 4 },
+            tier: 3,
+            stats: { hp: 8900, attack: 187, defense: 56, speed: 8 },
             skills: ['basic_attack', 'power_strike', 'war_cry'],
             rewards: {
-                gold: { min: 150, max: 280 },
-                exp: 400,
+                gold: { min: 100, max: 250 },
+                exp: 350,
                 items: [{ resource: 'wood', amount: 50 }, { resource: 'crystal', amount: 5 }]
             }
         },
+        // 4阶 Boss（第4层）
         flame_guardian: {
             name: '烈焰守卫',
-            stats: { hp: 350, attack: 28, defense: 12, speed: 5 },
+            tier: 4,
+            stats: { hp: 20380, attack: 376, defense: 93, speed: 9 },
             skills: ['basic_attack', 'power_strike', 'war_cry'],
             rewards: {
-                gold: { min: 200, max: 350 },
-                exp: 550,
+                gold: { min: 200, max: 500 },
+                exp: 700,
                 items: [{ resource: 'iron', amount: 15 }, { resource: 'steel', amount: 5 }]
             }
         },
+
+        // 5阶 Boss（第6层，跳过第5层资源层）
         frost_wyrm: {
             name: '冰霜巨龙',
-            stats: { hp: 500, attack: 35, defense: 15, speed: 6 },
+            tier: 5,
+            stats: { hp: 43400, attack: 736, defense: 155, speed: 10 },
             skills: ['basic_attack', 'power_strike', 'war_cry'],
             rewards: {
-                gold: { min: 300, max: 500 },
-                exp: 800,
+                gold: { min: 400, max: 1000 },
+                exp: 1500,
                 items: [{ resource: 'crystal', amount: 15 }, { resource: 'rune', amount: 5 }]
             }
         },
+        // 6阶 Boss（第7层）
         ancient_golem: {
             name: '远古石像',
-            stats: { hp: 600, attack: 40, defense: 20, speed: 3 },
+            tier: 6,
+            stats: { hp: 87840, attack: 1408, defense: 258, speed: 7 },
             skills: ['basic_attack', 'power_strike', 'war_cry'],
             rewards: {
-                gold: { min: 400, max: 600 },
-                exp: 1000,
-                items: [{ resource: 'stone', amount: 100 }, { resource: 'steel', amount: 10 }]
+                gold: { min: 800, max: 2000 },
+                exp: 3000,
+                items: [{ resource: 'steel', amount: 20 }, { resource: 'rune', amount: 8 }]
             }
         },
+        // 7阶 Boss（第8层）
         swamp_horror: {
             name: '沼泽恐魔',
-            stats: { hp: 700, attack: 45, defense: 18, speed: 5 },
+            tier: 7,
+            stats: { hp: 146540, attack: 2349, defense: 431, speed: 9 },
             skills: ['basic_attack', 'power_strike', 'war_cry'],
             rewards: {
-                gold: { min: 500, max: 700 },
-                exp: 1200,
-                items: [{ resource: 'crystal', amount: 20 }, { resource: 'darksteel', amount: 3 }]
+                gold: { min: 1500, max: 3500 },
+                exp: 5000,
+                items: [{ resource: 'crystal', amount: 30 }, { resource: 'darksteel', amount: 5 }]
             }
         },
+        // 8阶 Boss（第9层）
         void_walker: {
             name: '虚空行者',
-            stats: { hp: 800, attack: 50, defense: 22, speed: 7 },
+            tier: 8,
+            stats: { hp: 244340, attack: 3917, defense: 719, speed: 11 },
             skills: ['basic_attack', 'power_strike', 'war_cry'],
             rewards: {
-                gold: { min: 600, max: 900 },
-                exp: 1500,
-                items: [{ resource: 'rune', amount: 10 }, { resource: 'darksteel', amount: 5 }]
+                gold: { min: 3000, max: 7000 },
+                exp: 8000,
+                items: [{ resource: 'rune', amount: 15 }, { resource: 'darksteel', amount: 10 }]
             }
         }
     }

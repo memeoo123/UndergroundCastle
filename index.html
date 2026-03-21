@@ -36,7 +36,7 @@
     // SceneManager（场景管理器）
     // ============================================================
     var SceneManager = {
-        currentScene: 'outside',  // 'outside' | 'dungeon-select' | 'exploration' | 'combat'
+        currentScene: 'outside',  // 'outside' | 'dungeon-select' | 'exploration' | 'combat' | 'portal-select'
         _params: null,            // 场景切换时传递的参数
         _combatCallback: null,    // 战斗结束后的回调
 
@@ -48,15 +48,18 @@
                 ConfigLoader.loadAll();
                 ProgressTracker.init(SceneManager._loadDungeonProgress());
                 DungeonSelectUI.reset();
-                DungeonSelectUI.maxPartySize = ConfigLoader.getMaxPartySize();
+                // 根据默认选中层级设置上阵人数上限
+                DungeonSelectUI.maxPartySize = ConfigLoader.getMaxPartySizeForLayer(DungeonSelectUI.selectedLayer);
             }
 
             if (scene === 'exploration') {
-                var layer = params.layer || 1;
-                var party = params.party || [];
-                DungeonMap.init(layer, ConfigLoader);
-                FogOfWar.init(ConfigLoader.getMapWidth(), ConfigLoader.getMapHeight());
-                ExplorationManager.init(layer, party, null, DungeonMap, FogOfWar, ConfigLoader);
+                if (!params._skipInit) {
+                    var layer = params.layer || 1;
+                    var party = params.party || [];
+                    DungeonMap.init(layer, ConfigLoader);
+                    FogOfWar.init(DungeonMap.width, DungeonMap.height);
+                    ExplorationManager.init(layer, party, null, DungeonMap, FogOfWar, ConfigLoader);
+                }
             }
 
             if (scene === 'combat') {
@@ -99,6 +102,13 @@
                     ExplorationManager.collectedResources);
             } else if (this.currentScene === 'combat') {
                 CombatRenderer.render(ctx, canvas, CombatEngine);
+            } else if (this.currentScene === 'portal-select') {
+                // 先渲染探索界面作为背景
+                DungeonRenderer.render(ctx, canvas, DungeonMap, FogOfWar,
+                    ExplorationManager.playerPos, ExplorationManager.party,
+                    ExplorationManager.collectedResources);
+                // 再渲染传送选择覆盖层
+                PortalSelectUI.render(ctx, canvas);
             }
         },
 
@@ -264,8 +274,8 @@
         };
 
         var origPromote = SoldierManager.promote;
-        SoldierManager.promote = function(soldierIndex, targetTypeId, resourceManager) {
-            var result = origPromote.call(SoldierManager, soldierIndex, targetTypeId, resourceManager);
+        SoldierManager.promote = function(soldierIndex, resourceManager) {
+            var result = origPromote.call(SoldierManager, soldierIndex, resourceManager);
             if (result) { saveAll(); }
             return result;
         };
@@ -290,6 +300,8 @@
                 handleExplorationClick(x, y, canvas.width, canvas.height);
             } else if (SceneManager.currentScene === 'combat') {
                 handleCombatClick(x, y);
+            } else if (SceneManager.currentScene === 'portal-select') {
+                PortalSelectUI.handleClick(x, y);
             }
         });
 
@@ -352,6 +364,15 @@
         if (result.ended) {
             var summary = result.summary;
             if (summary && summary.preserved) {
+                // 资源层：返回入口即解锁下一层并记录该固定层为已到达
+                if (ExplorationManager._isResourceLayer) {
+                    ProgressTracker.unlockNextLayer(ExplorationManager.currentLayer);
+                    // 记录该固定层为已到达（标记在 layerProgress 中）
+                    if (!ProgressTracker.layerProgress[ExplorationManager.currentLayer]) {
+                        ProgressTracker.layerProgress[ExplorationManager.currentLayer] = {};
+                    }
+                    ProgressTracker.layerProgress[ExplorationManager.currentLayer].reached = true;
+                }
                 // 将资源添加到关外
                 var res = summary.resources;
                 for (var key in res) {
@@ -371,6 +392,9 @@
             if (enc.type === 'treasure') {
                 // 自动收集宝藏
                 ExplorationManager.collectTreasure();
+            } else if (enc.type === 'facility') {
+                // 自动采集矿产设施
+                ExplorationManager.collectFacility();
             } else if (enc.type === 'monster') {
                 // 触发怪物战斗（单个怪物）
                 CombatEngine.initMonsterFight(ExplorationManager.party, enc.monsterId, ConfigLoader);
@@ -388,8 +412,62 @@
                         }
                     }
                 });
+            } else if (enc.type === 'portal') {
+                // 踏入传送阵触发 Boss 战
+                var layerCfg = ConfigLoader.getDungeonLayer(ExplorationManager.currentLayer);
+                var bossId = enc.bossId || (layerCfg ? layerCfg.bossId : null);
+                if (!bossId) return;
+                CombatEngine.initBossFight(ExplorationManager.party, bossId, ConfigLoader);
+                SceneManager.switchTo('combat', {
+                    callback: function(state) {
+                        if (state === 'victory') {
+                            var rewards = CombatEngine.getRewards();
+                            ExplorationManager.addCombatRewards(rewards);
+                            ProgressTracker.markLayerComplete(ExplorationManager.currentLayer);
+                            SceneManager._saveDungeonProgress();
+
+                            // 显示传送选择界面
+                            var curLayer = ExplorationManager.currentLayer;
+                            PortalSelectUI.show(curLayer, ProgressTracker.unlockedLayers, function(targetLayer) {
+                                if (targetLayer === null) {
+                                    // 返回关外：保存资源
+                                    var summary = ExplorationManager.endExploration(false);
+                                    if (summary && summary.preserved) {
+                                        var res = summary.resources;
+                                        for (var key in res) {
+                                            if (res[key] > 0) {
+                                                ResourceManager.addResource(key, res[key]);
+                                            }
+                                        }
+                                    }
+                                    SceneManager._saveDungeonProgress();
+                                    SceneManager.switchTo('outside');
+                                } else {
+                                    // 传送到目标层级：保留累计资源，重新初始化地图
+                                    var party = ExplorationManager.party;
+                                    var resources = ExplorationManager.getResourceSummary();
+                                    DungeonMap.init(targetLayer, ConfigLoader);
+                                    FogOfWar.init(DungeonMap.width, DungeonMap.height);
+                                    ExplorationManager.init(targetLayer, party, null, DungeonMap, FogOfWar, ConfigLoader);
+                                    // 恢复之前累计的资源
+                                    for (var rk in resources) {
+                                        ExplorationManager.collectedResources[rk] = (ExplorationManager.collectedResources[rk] || 0) + resources[rk];
+                                    }
+                                    SceneManager.switchTo('exploration', { layer: targetLayer, party: party, _skipInit: true });
+                                }
+                            });
+                            SceneManager.currentScene = 'portal-select';
+                        } else {
+                            // Boss 战失败：不保留资源，返回关外
+                            ProgressTracker.handleBossDefeat(ExplorationManager.currentLayer);
+                            ExplorationManager.endExploration(true);
+                            SceneManager._saveDungeonProgress();
+                            SceneManager.switchTo('outside');
+                        }
+                    }
+                });
             } else if (enc.type === 'boss') {
-                // 触发 Boss 战
+                // 触发 Boss 战（兼容旧 boss 类型地块）
                 CombatEngine.initBossFight(ExplorationManager.party, enc.bossId, ConfigLoader);
                 SceneManager.switchTo('combat', {
                     callback: function(state) {

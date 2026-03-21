@@ -166,44 +166,44 @@
     - **Property 4: 战斗结束条件**
     - **Validates: Requirements 2.2, 2.4, 2.7, 2.8**
 
-- [ ] 12. 实现传送阵与层级推进系统
-  - [ ] 12.1 修改 DungeonMap 地图生成，将 Boss 房间改为传送阵（portal 类型）
+- [x] 12. 实现传送阵与层级推进系统
+  - [x] 12.1 修改 DungeonMap 地图生成，将 Boss 房间改为传送阵（portal 类型）
     - 传送阵位于距入口最远的可达位置
     - _Requirements: 5.1, 5.9_
-  - [ ] 12.2 更新 DungeonRenderer 渲染传送阵图标
+  - [x] 12.2 更新 DungeonRenderer 渲染传送阵图标
     - 使用特殊图标区别于普通地块
     - _Requirements: 5.9_
-  - [ ] 12.3 修改 ExplorationManager 遭遇触发逻辑
+  - [x] 12.3 修改 ExplorationManager 遭遇触发逻辑
     - 走到传送阵触发 Boss 战（而非 boss 类型地块）
     - _Requirements: 5.2_
-  - [ ] 12.4 实现 Boss 战胜利后的传送选择界面
+  - [x] 12.4 实现 Boss 战胜利后的传送选择界面
     - 显示可选层级列表（下一层 + 已解锁层级）
     - 玩家选择后切换到对应层级继续探险
     - _Requirements: 5.5, 5.6_
-  - [ ] 12.5 更新 index.html Boss 战回调逻辑
+  - [x] 12.5 更新 index.html Boss 战回调逻辑
     - 胜利后显示传送选择而非直接返回关外
     - 失败后返回关外
     - _Requirements: 5.5, 5.8_
 
-- [ ] 13. 实现资源层系统
-  - [ ] 13.1 扩展 ConfigLoader 支持资源层配置
+- [x] 13. 实现资源层系统
+  - [x] 13.1 扩展 ConfigLoader 支持资源层配置
     - 添加 isResourceLayer(layerId) 和 getResourceLayer(layerId) 方法
     - _Requirements: 11.1, 11.8_
-  - [ ] 13.2 实现资源层地图生成（固定布局）
+  - [x] 13.2 实现资源层地图生成（固定布局）
     - 根据 resourceLayers 配置生成固定地图
     - 放置矿产设施到指定位置
     - _Requirements: 11.2, 11.3_
-  - [ ] 13.3 实现矿产设施采集逻辑
+  - [x] 13.3 实现矿产设施采集逻辑
     - 玩家到达矿产位置时可采集资源
     - 采集后资源添加到累计资源，设施标记为已采集
     - _Requirements: 11.4, 11.5_
-  - [ ] 13.4 更新 DungeonRenderer 渲染矿产设施图标
+  - [x] 13.4 更新 DungeonRenderer 渲染矿产设施图标
     - 不同类型矿产使用不同图标/颜色
     - _Requirements: 11.3_
-  - [ ] 13.5 实现资源层完成逻辑
+  - [x] 13.5 实现资源层完成逻辑
     - 资源层无 Boss，返回入口即解锁下一层
     - _Requirements: 11.7, 11.9_
-  - [ ] 13.6 更新 DungeonSelectUI 显示资源层
+  - [x] 13.6 更新 DungeonSelectUI 显示资源层
     - 资源层显示特殊标识（如"资源层"标签）
     - _Requirements: 11.1_
 

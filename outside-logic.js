@@ -150,13 +150,13 @@ var SaveSystem = {
                     data.buildings[bKeys[i]] = buildings[bKeys[i]];
                 }
             }
-            // 序列化士兵数据（树形进阶体系：只存 type/attack/defense/hp，无 level）
+            // 序列化士兵数据（10阶线性体系：存 tier/attack/defense/hp）
             if (soldiers && Array.isArray(soldiers)) {
                 data.soldiers = [];
                 for (var i = 0; i < soldiers.length; i++) {
                     var s = soldiers[i];
                     data.soldiers.push({
-                        type: s.type,
+                        tier: s.tier,
                         attack: s.attack,
                         defense: s.defense,
                         hp: s.hp
@@ -215,14 +215,14 @@ var SaveSystem = {
             } else {
                 result.buildings = {};
             }
-            // 恢复士兵数据（树形进阶体系：只恢复 type/attack/defense/hp，无 level）
+            // 恢复士兵数据（10阶线性体系：恢复 tier/attack/defense/hp）
             if (parsed.soldiers && Array.isArray(parsed.soldiers)) {
                 result.soldiers = [];
                 for (var i = 0; i < parsed.soldiers.length; i++) {
                     var s = parsed.soldiers[i];
-                    if (s && typeof s === 'object' && typeof s.type === 'string') {
+                    if (s && typeof s === 'object' && typeof s.tier === 'number') {
                         result.soldiers.push({
-                            type: s.type,
+                            tier: s.tier,
                             attack: (typeof s.attack === 'number') ? s.attack : 0,
                             defense: (typeof s.defense === 'number') ? s.defense : 0,
                             hp: (typeof s.hp === 'number') ? s.hp : 0
@@ -308,9 +308,8 @@ var InputHandler = {
                 return;
             }
 
-            // Training_Page 模式：promoteDialogOpen 时忽略，否则支持滚动
+            // Training_Page 模式：支持滚动
             if (pageManager && pageManager.showTrainingPage) {
-                if (pageManager.promoteDialogOpen) return;
                 if (dist > self._DRAG_THRESHOLD) {
                     var scrollDelta = pos.y - startY;
                     pageManager.handleTrainingScroll(-scrollDelta);
@@ -387,33 +386,6 @@ var InputHandler = {
 
                     // Training_Page 点击处理
                     if (pageManager.showTrainingPage) {
-                        if (pageManager.promoteDialogOpen) {
-                            // Promote_Dialog 模态：只处理弹窗内交互
-                            var closeBtn = CanvasRenderer._promoteDialogCloseBtn;
-                            if (closeBtn && isPointInRect(pos.x, pos.y, closeBtn)) {
-                                pageManager.closePromoteDialog();
-                                dragMode = null;
-                                return;
-                            }
-                            // 检测进阶目标按钮
-                            var targetBtns = CanvasRenderer._promoteDialogTargetBtns;
-                            if (targetBtns) {
-                                var targetIds = Object.keys(targetBtns);
-                                for (var t = 0; t < targetIds.length; t++) {
-                                    var tid = targetIds[t];
-                                    if (isPointInRect(pos.x, pos.y, targetBtns[tid])) {
-                                        soldierManager.promote(pageManager.promoteDialogSoldierIndex, tid, ResourceManager);
-                                        pageManager.closePromoteDialog();
-                                        dragMode = null;
-                                        return;
-                                    }
-                                }
-                            }
-                            // 其他点击忽略（模态）
-                            dragMode = null;
-                            return;
-                        }
-
                         // Training_Page 非弹窗模式
                         // 返回按钮
                         var tBackBtn = CanvasRenderer._trainingBackBtn;
@@ -429,14 +401,14 @@ var InputHandler = {
                             dragMode = null;
                             return;
                         }
-                        // 士兵进阶按钮
+                        // 士兵直接进阶按钮
                         var promoteBtns = CanvasRenderer._trainingPromoteBtns;
                         if (promoteBtns) {
                             var pIds = Object.keys(promoteBtns);
                             for (var p = 0; p < pIds.length; p++) {
                                 var pid = pIds[p];
                                 if (isPointInRect(pos.x, pos.y, promoteBtns[pid])) {
-                                    pageManager.openPromoteDialog(parseInt(pid));
+                                    soldierManager.promote(parseInt(pid), ResourceManager);
                                     dragMode = null;
                                     return;
                                 }
@@ -536,7 +508,7 @@ var InputHandler = {
                 var delta = e.deltaY * 0.5;
                 if (pageManager.showBuildingPage) {
                     pageManager.handleBuildingScroll(delta);
-                } else if (pageManager.showTrainingPage && !pageManager.promoteDialogOpen) {
+                } else if (pageManager.showTrainingPage) {
                     pageManager.handleTrainingScroll(delta);
                 } else {
                     pageManager.handleScroll(pageManager.currentPage, delta);
@@ -568,9 +540,6 @@ var CanvasRenderer = {
         // Training_Page 全屏覆盖
         if (pageManager && pageManager.showTrainingPage) {
             this.drawTrainingPage(soldierManager, resourceManager, pageManager.trainingScrollOffset, canvas.width, canvas.height);
-            if (pageManager.promoteDialogOpen) {
-                this.drawPromoteDialog(pageManager.promoteDialogSoldierIndex, soldierManager, resourceManager, canvas.width, canvas.height);
-            }
             return;
         }
 
@@ -1531,19 +1500,19 @@ var CanvasRenderer = {
         ctx.font = 'bold 16px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('招募冒险者', recruitBtnX + recruitBtnW / 2, recruitBtnY + recruitBtnH / 2 - 8);
+        ctx.fillText('招募士兵', recruitBtnX + recruitBtnW / 2, recruitBtnY + recruitBtnH / 2 - 8);
 
         // 费用信息
-        var advDef = config['adventurer'];
-        if (advDef && advDef.recruitCost) {
-            var costKeys = Object.keys(advDef.recruitCost);
+        var recruitCost = config.recruitCost;
+        if (recruitCost) {
+            var costKeys = Object.keys(recruitCost);
             var costText = '';
             for (var c = 0; c < costKeys.length; c++) {
                 var rk = costKeys[c];
                 if (c > 0) costText += '  ';
-                costText += (names[rk] || rk) + ':' + advDef.recruitCost[rk];
+                costText += (names[rk] || rk) + ':' + recruitCost[rk];
             }
-            ctx.fillStyle = resourceManager.hasEnough(advDef.recruitCost) ? '#cccccc' : '#ff4444';
+            ctx.fillStyle = resourceManager.hasEnough(recruitCost) ? '#cccccc' : '#ff4444';
             ctx.font = '12px sans-serif';
             ctx.fillText(costText, recruitBtnX + recruitBtnW / 2, recruitBtnY + recruitBtnH / 2 + 10);
         }
@@ -1574,13 +1543,12 @@ var CanvasRenderer = {
         ctx.clip();
 
         var currentY = scrollY - actualScroll;
+        var maxTier = config.maxTier || 10;
 
         for (var i = 0; i < soldiers.length; i++) {
             var soldier = soldiers[i];
-            var sDef = config[soldier.type];
-            var sName = sDef ? sDef.name : soldier.type;
-            var sTier = sDef ? sDef.tier : '?';
-            var promoteTo = sDef ? (sDef.promoteTo || []) : [];
+            var sName = soldierManager.getTierName(soldier.tier);
+            var isMaxTier = soldier.tier >= maxTier;
 
             // 条目背景
             ctx.fillStyle = '#2a2a3e';
@@ -1594,26 +1562,47 @@ var CanvasRenderer = {
             ctx.font = 'bold 16px sans-serif';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
-            ctx.fillText(sName + '  [T' + sTier + ']', scrollX + 10, currentY + 8);
+            ctx.fillText(sName + '  [T' + soldier.tier + ']', scrollX + 10, currentY + 8);
 
             // 属性：ATK / DEF / HP
             ctx.fillStyle = '#cccccc';
             ctx.font = '13px sans-serif';
             ctx.fillText('ATK:' + soldier.attack + '  DEF:' + soldier.defense + '  HP:' + soldier.hp, scrollX + 10, currentY + 32);
 
+            // 进阶费用提示
+            if (!isMaxTier) {
+                var nextTier = soldier.tier + 1;
+                var pCost = config.promoteCosts && config.promoteCosts[nextTier];
+                if (pCost) {
+                    var pCostKeys = Object.keys(pCost);
+                    var pCostText = '进阶费: ';
+                    for (var pc = 0; pc < pCostKeys.length; pc++) {
+                        var prk = pCostKeys[pc];
+                        if (pc > 0) pCostText += '  ';
+                        pCostText += (names[prk] || prk) + ':' + pCost[prk];
+                    }
+                    ctx.fillStyle = resourceManager.hasEnough(pCost) ? '#aaaaaa' : '#ff4444';
+                    ctx.font = '11px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'top';
+                    ctx.fillText(pCostText, scrollX + 10, currentY + 50);
+                }
+            }
+
             // 进阶按钮或满阶标记
-            if (promoteTo.length > 0) {
+            if (!isMaxTier) {
+                var canDo = soldierManager.canPromote(i, resourceManager);
                 var pBtnW = 70;
                 var pBtnH = 32;
                 var pBtnX = scrollX + scrollWidth - pBtnW - 15;
                 var pBtnY = currentY + (entryHeight - pBtnH) / 2;
 
-                ctx.fillStyle = '#6a5acd';
+                ctx.fillStyle = canDo ? '#44aa44' : '#555555';
                 ctx.fillRect(pBtnX, pBtnY, pBtnW, pBtnH);
                 ctx.strokeStyle = '#333333';
                 ctx.lineWidth = 1;
                 ctx.strokeRect(pBtnX, pBtnY, pBtnW, pBtnH);
-                ctx.fillStyle = '#ffffff';
+                ctx.fillStyle = canDo ? '#ffffff' : '#999999';
                 ctx.font = '14px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
@@ -1650,129 +1639,6 @@ var CanvasRenderer = {
             ctx.fillStyle = '#888888';
             ctx.fillRect(scrollbarX, thumbY, scrollbarWidth, thumbHeight);
         }
-    },
-
-    drawPromoteDialog: function(soldierIndex, soldierManager, resourceManager, canvasWidth, canvasHeight) {
-        var ctx = this.ctx;
-        var config = _getSoldierConfig();
-        var names = (typeof RESOURCE_NAMES !== 'undefined') ? RESOURCE_NAMES : {};
-        var soldiers = soldierManager.getSoldiers();
-
-        // 越界保护
-        if (soldierIndex < 0 || soldierIndex >= soldiers.length) return;
-        var soldier = soldiers[soldierIndex];
-        var currentDef = config[soldier.type];
-        if (!currentDef) return;
-
-        var promoteTo = currentDef.promoteTo || [];
-
-        // 半透明遮罩
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-        // 弹窗面板尺寸
-        var panelW = Math.min(380, canvasWidth - 40);
-        var targetCount = promoteTo.length;
-        var targetEntryH = 90;
-        var panelH = Math.min(120 + targetCount * targetEntryH, canvasHeight - 60);
-        var panelX = (canvasWidth - panelW) / 2;
-        var panelY = (canvasHeight - panelH) / 2;
-
-        // 面板背景
-        ctx.fillStyle = '#1e1e3a';
-        ctx.fillRect(panelX, panelY, panelW, panelH);
-        ctx.strokeStyle = '#6a5acd';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(panelX, panelY, panelW, panelH);
-
-        // 标题：士兵名称 + "进阶"
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 20px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.fillText(currentDef.name + ' 进阶', panelX + panelW / 2, panelY + 15);
-
-        // 关闭按钮（右上角 X）
-        var closeBtnSize = 30;
-        var closeBtn = { x: panelX + panelW - closeBtnSize - 8, y: panelY + 8, width: closeBtnSize, height: closeBtnSize };
-        ctx.fillStyle = '#444466';
-        ctx.fillRect(closeBtn.x, closeBtn.y, closeBtn.width, closeBtn.height);
-        ctx.strokeStyle = '#666688';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(closeBtn.x, closeBtn.y, closeBtn.width, closeBtn.height);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 18px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('X', closeBtn.x + closeBtn.width / 2, closeBtn.y + closeBtn.height / 2);
-        this._promoteDialogCloseBtn = closeBtn;
-
-        // 遍历 promoteTo 列表
-        this._promoteDialogTargetBtns = {};
-        var startY = panelY + 55;
-
-        for (var t = 0; t < promoteTo.length; t++) {
-            var targetId = promoteTo[t];
-            var targetDef = config[targetId];
-            if (!targetDef) continue;
-
-            var entryY = startY + t * targetEntryH;
-            var entryX = panelX + 15;
-            var entryW = panelW - 30;
-
-            // 目标条目背景
-            ctx.fillStyle = '#2a2a4e';
-            ctx.fillRect(entryX, entryY, entryW, targetEntryH - 10);
-            ctx.strokeStyle = '#444466';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(entryX, entryY, entryW, targetEntryH - 10);
-
-            // 目标名称 + Tier
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 15px sans-serif';
-            ctx.textAlign = 'left';
-            ctx.textBaseline = 'top';
-            ctx.fillText(targetDef.name + '  [T' + targetDef.tier + ']', entryX + 10, entryY + 8);
-
-            // 属性：ATK / DEF / HP
-            ctx.fillStyle = '#cccccc';
-            ctx.font = '12px sans-serif';
-            ctx.fillText('ATK:' + targetDef.stats.attack + '  DEF:' + targetDef.stats.defense + '  HP:' + targetDef.stats.hp, entryX + 10, entryY + 28);
-
-            // 进阶费用
-            var costObj = targetDef.promoteCost || {};
-            var costKeys = Object.keys(costObj);
-            var costText = '';
-            for (var c = 0; c < costKeys.length; c++) {
-                var rk = costKeys[c];
-                if (c > 0) costText += '  ';
-                costText += (names[rk] || rk) + ':' + costObj[rk];
-            }
-            var hasEnough = resourceManager.hasEnough(costObj);
-            ctx.fillStyle = hasEnough ? '#cccccc' : '#ff4444';
-            ctx.font = '12px sans-serif';
-            ctx.fillText('费用: ' + costText, entryX + 10, entryY + 46);
-
-            // 进阶按钮
-            var canDo = soldierManager.canPromote(soldierIndex, targetId, resourceManager);
-            var pBtnW = 60;
-            var pBtnH = 28;
-            var pBtnX = entryX + entryW - pBtnW - 10;
-            var pBtnY = entryY + (targetEntryH - 10 - pBtnH) / 2;
-
-            ctx.fillStyle = canDo ? '#44aa44' : '#555555';
-            ctx.fillRect(pBtnX, pBtnY, pBtnW, pBtnH);
-            ctx.strokeStyle = '#333333';
-            ctx.lineWidth = 1;
-            ctx.strokeRect(pBtnX, pBtnY, pBtnW, pBtnH);
-            ctx.fillStyle = canDo ? '#ffffff' : '#999999';
-            ctx.font = '13px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('进阶', pBtnX + pBtnW / 2, pBtnY + pBtnH / 2);
-
-            this._promoteDialogTargetBtns[targetId] = { x: pBtnX, y: pBtnY, width: pBtnW, height: pBtnH };
-        }
     }
 };
 
@@ -1799,9 +1665,7 @@ var PageManager = {
     showTrainingPage: false,
     trainingScrollOffset: 0,
 
-    // Promote_Dialog 状态
-    promoteDialogOpen: false,
-    promoteDialogSoldierIndex: -1,
+    // Promote_Dialog 状态（已废弃，保留兼容）
 
     // 动画相关
     animationStartTime: 0,
@@ -1835,27 +1699,15 @@ var PageManager = {
     openTrainingPage: function() {
         this.showTrainingPage = true;
         this.trainingScrollOffset = 0;
-        this.promoteDialogOpen = false;
     },
 
     closeTrainingPage: function() {
         this.showTrainingPage = false;
-        this.promoteDialogOpen = false;
     },
 
     handleTrainingScroll: function(delta) {
         this.trainingScrollOffset += delta;
         if (this.trainingScrollOffset < 0) this.trainingScrollOffset = 0;
-    },
-
-    openPromoteDialog: function(soldierIndex) {
-        this.promoteDialogOpen = true;
-        this.promoteDialogSoldierIndex = soldierIndex;
-    },
-
-    closePromoteDialog: function() {
-        this.promoteDialogOpen = false;
-        this.promoteDialogSoldierIndex = -1;
     },
 
     startDrag: function(x) {
@@ -2242,45 +2094,45 @@ var ToastManager = {
 
 // 获取士兵配置
 function _getSoldierConfig() {
-    return (typeof SOLDIER_CONFIG_EXTERNAL !== 'undefined' && SOLDIER_CONFIG_EXTERNAL.soldiers)
-        ? SOLDIER_CONFIG_EXTERNAL.soldiers : {};
+    return (typeof SOLDIER_CONFIG_EXTERNAL !== 'undefined') ? SOLDIER_CONFIG_EXTERNAL : {};
 }
 
-// 士兵管理器（树形进阶体系）
+// 士兵管理器（10阶线性进阶体系）
 var SoldierManager = {
     soldiers: [],
 
     recruit: function(resourceManager) {
         var config = _getSoldierConfig();
-        var advDef = config['adventurer'];
-        if (!advDef || !advDef.recruitCost) return false;
-        if (!resourceManager.hasEnough(advDef.recruitCost)) return false;
-        resourceManager.deduct(advDef.recruitCost);
+        if (!config.recruitCost || !config.tiers || !config.tiers[1]) return false;
+        if (!resourceManager.hasEnough(config.recruitCost)) return false;
+        resourceManager.deduct(config.recruitCost);
+        var t1 = config.tiers[1];
         var soldier = {
-            type: 'adventurer',
-            attack: advDef.stats.attack,
-            defense: advDef.stats.defense,
-            hp: advDef.stats.hp
+            tier: 1,
+            attack: t1.attack,
+            defense: t1.defense,
+            hp: t1.hp
         };
         this.soldiers.push(soldier);
         return true;
     },
 
-    promote: function(soldierIndex, targetTypeId, resourceManager) {
+    promote: function(soldierIndex, resourceManager) {
         if (soldierIndex < 0 || soldierIndex >= this.soldiers.length) return false;
         var soldier = this.soldiers[soldierIndex];
         var config = _getSoldierConfig();
-        var currentDef = config[soldier.type];
-        if (!currentDef || !currentDef.promoteTo) return false;
-        if (currentDef.promoteTo.indexOf(targetTypeId) === -1) return false;
-        var targetDef = config[targetTypeId];
-        if (!targetDef || !targetDef.promoteCost) return false;
-        if (!resourceManager.hasEnough(targetDef.promoteCost)) return false;
-        resourceManager.deduct(targetDef.promoteCost);
-        soldier.type = targetTypeId;
-        soldier.attack = targetDef.stats.attack;
-        soldier.defense = targetDef.stats.defense;
-        soldier.hp = targetDef.stats.hp;
+        var nextTier = soldier.tier + 1;
+        if (nextTier > (config.maxTier || 10)) return false;
+        var cost = config.promoteCosts && config.promoteCosts[nextTier];
+        if (!cost) return false;
+        if (!resourceManager.hasEnough(cost)) return false;
+        resourceManager.deduct(cost);
+        var tierDef = config.tiers && config.tiers[nextTier];
+        if (!tierDef) return false;
+        soldier.tier = nextTier;
+        soldier.attack = tierDef.attack;
+        soldier.defense = tierDef.defense;
+        soldier.hp = tierDef.hp;
         return true;
     },
 
@@ -2290,21 +2142,25 @@ var SoldierManager = {
 
     canRecruit: function(resourceManager) {
         var config = _getSoldierConfig();
-        var advDef = config['adventurer'];
-        if (!advDef || !advDef.recruitCost) return false;
-        return resourceManager.hasEnough(advDef.recruitCost);
+        if (!config.recruitCost) return false;
+        return resourceManager.hasEnough(config.recruitCost);
     },
 
-    canPromote: function(soldierIndex, targetTypeId, resourceManager) {
+    canPromote: function(soldierIndex, resourceManager) {
         if (soldierIndex < 0 || soldierIndex >= this.soldiers.length) return false;
         var soldier = this.soldiers[soldierIndex];
         var config = _getSoldierConfig();
-        var currentDef = config[soldier.type];
-        if (!currentDef || !currentDef.promoteTo) return false;
-        if (currentDef.promoteTo.indexOf(targetTypeId) === -1) return false;
-        var targetDef = config[targetTypeId];
-        if (!targetDef || !targetDef.promoteCost) return false;
-        return resourceManager.hasEnough(targetDef.promoteCost);
+        var nextTier = soldier.tier + 1;
+        if (nextTier > (config.maxTier || 10)) return false;
+        var cost = config.promoteCosts && config.promoteCosts[nextTier];
+        if (!cost) return false;
+        return resourceManager.hasEnough(cost);
+    },
+
+    getTierName: function(tier) {
+        var config = _getSoldierConfig();
+        var tierDef = config.tiers && config.tiers[tier];
+        return tierDef ? tierDef.name : (tier + '阶士兵');
     }
 };
 

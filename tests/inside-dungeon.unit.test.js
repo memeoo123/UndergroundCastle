@@ -173,14 +173,14 @@ describe('CombatEngine', () => {
 
     function makeAlly(overrides) {
         return Object.assign({
-            name: '战士', hp: 20, attack: 5, speed: 4,
+            name: '战士', hp: 20, attack: 5, defense: 0, speed: 4,
             skills: ['basic_attack']
         }, overrides || {});
     }
 
     function makeEnemy(overrides) {
         return Object.assign({
-            name: '史莱姆', hp: 10, attack: 2, speed: 3,
+            name: '史莱姆', hp: 10, attack: 2, defense: 0, speed: 3,
             skills: ['basic_attack']
         }, overrides || {});
     }
@@ -329,9 +329,9 @@ describe('CombatEngine', () => {
             CombatEngine.checkBattleEnd();
             var rewards = CombatEngine.getRewards();
             expect(rewards).not.toBeNull();
-            expect(rewards.gold).toBeGreaterThanOrEqual(1);
-            expect(rewards.gold).toBeLessThanOrEqual(3);
-            expect(rewards.exp).toBe(5);
+            expect(rewards.gold).toBeGreaterThanOrEqual(3);
+            expect(rewards.gold).toBeLessThanOrEqual(8);
+            expect(rewards.exp).toBe(10);
         });
 
         test('非胜利状态返回 null', () => {
@@ -346,7 +346,7 @@ describe('CombatEngine', () => {
             expect(result).toBe(true);
             expect(CombatEngine.isBossFight).toBe(true);
             expect(CombatEngine.enemy.name).toBe('哥布林王');
-            expect(CombatEngine.enemy.hp).toBe(100);
+            expect(CombatEngine.enemy.hp).toBe(800);
         });
 
         test('不存在的 Boss 返回 false', () => {

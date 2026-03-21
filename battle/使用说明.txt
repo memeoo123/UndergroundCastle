@@ -1,0 +1,27 @@
+【如何得到「一个 Excel、三个分表」】
+
+方式一（推荐）：用 Python 生成一个 .xlsx
+  1. 在本文件夹打开命令行，执行：pip install openpyxl
+  2. 执行：python build_numerical_sheet.py
+  3. 会生成「地下城堡数值表.xlsx」，内含三个分表：
+     - 1-基础属性说明
+     - 2-公式
+     - 3-推导数值
+
+方式二：用 CSV 自己在 Excel 里拼
+  1. 新建一个空白 Excel 工作簿
+  2. 把「1-基础属性说明.csv」内容复制到 Sheet1，改名为「1-基础属性说明」
+  3. 新建 Sheet2，把「2-公式.csv」内容粘贴进去，改名为「2-公式」
+  4. 新建 Sheet3，把「3-推导数值.csv」内容粘贴进去，改名为「3-推导数值」
+  或者：数据 → 从文本/CSV 分别导入三个 CSV，每个导入为新工作表
+
+【手动表.xlsx 与 2-公式.csv 同步】
+  主方案为减法后，可用脚本把「2-公式.csv」整表写入「手动表.xlsx」的「2-公式表」，
+  并把常数表中的 min_damage 改名为 D_min、修正「4-标准士兵表」验算列表头（同等阶应对「敌人」）：
+    python patch_manual_workbook.py
+  需已安装：pip install openpyxl
+
+【手动表 → JSON（士兵表 / 敌人表）】
+  将「4-标准士兵表」「5-标准敌人表」导出为 JSON（取单元格计算值）：
+    python export_manual_sheets_to_json.py
+  生成：手动表-4-标准士兵表.json、手动表-5-标准敌人表.json

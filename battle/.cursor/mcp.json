@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "xlsx-reader": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/xlsx-mcp-main/build/index.js"
+      ]
+    }
+  }
+}

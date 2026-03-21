@@ -3,13 +3,24 @@ var DUNGEON_CONFIG_EXTERNAL = {
     mapWidth: 50,
     mapHeight: 50,
     viewRange: 2,
-    maxPartySize: 4,
+    maxPartySize: 6,
     entrance: { x: 25, y: 25 },
 
-    // 战斗层配置
+    // 上阵人数随层级递增配置：到达指定层级后解锁对应上阵人数，最高6人
+    partySizeByLayer: [
+        { layer: 1,  size: 1 },
+        { layer: 5,  size: 2 },
+        { layer: 10, size: 3 },
+        { layer: 15, size: 4 },
+        { layer: 20, size: 5 },
+        { layer: 25, size: 6 }
+    ],
+
+    // 战斗层配置（怪物池按阶数对应标准敌人表）
     layers: {
         1: {
             name: '废弃矿洞',
+            tier: 1,
             wallDensity: 0.3,
             monsterDensity: 0.05,
             treasureDensity: 0.02,
@@ -23,6 +34,7 @@ var DUNGEON_CONFIG_EXTERNAL = {
         },
         2: {
             name: '暗影地穴',
+            tier: 2,
             wallDensity: 0.25,
             monsterDensity: 0.07,
             treasureDensity: 0.03,
@@ -36,10 +48,11 @@ var DUNGEON_CONFIG_EXTERNAL = {
         },
         3: {
             name: '蘑菇森林',
+            tier: 3,
             wallDensity: 0.28,
             monsterDensity: 0.06,
             treasureDensity: 0.025,
-            monsterPool: ['slime', 'spider', 'rat'],
+            monsterPool: ['mushroom', 'cave_worm', 'spider'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 15, max: 40 }], weight: 5 },
                 { items: [{ resource: 'wood', min: 10, max: 20 }], weight: 4 },
@@ -49,10 +62,11 @@ var DUNGEON_CONFIG_EXTERNAL = {
         },
         4: {
             name: '熔岩洞窟',
+            tier: 4,
             wallDensity: 0.22,
             monsterDensity: 0.08,
             treasureDensity: 0.03,
-            monsterPool: ['skeleton', 'ghost', 'bat'],
+            monsterPool: ['fire_imp', 'lava_hound', 'skeleton'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 20, max: 50 }], weight: 5 },
                 { items: [{ resource: 'iron', min: 3, max: 6 }], weight: 4 },
@@ -62,10 +76,11 @@ var DUNGEON_CONFIG_EXTERNAL = {
         },
         6: {
             name: '冰封深渊',
+            tier: 5,
             wallDensity: 0.2,
             monsterDensity: 0.09,
             treasureDensity: 0.035,
-            monsterPool: ['ghost', 'skeleton', 'spider'],
+            monsterPool: ['frost_elemental', 'ice_wraith', 'ghost'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 30, max: 70 }], weight: 5 },
                 { items: [{ resource: 'crystal', min: 2, max: 4 }], weight: 3 },
@@ -75,10 +90,11 @@ var DUNGEON_CONFIG_EXTERNAL = {
         },
         7: {
             name: '古代遗迹',
+            tier: 6,
             wallDensity: 0.18,
             monsterDensity: 0.1,
             treasureDensity: 0.04,
-            monsterPool: ['skeleton', 'ghost', 'spider'],
+            monsterPool: ['stone_guardian', 'ancient_spirit', 'skeleton'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 40, max: 90 }], weight: 5 },
                 { items: [{ resource: 'steel', min: 2, max: 5 }], weight: 3 },
@@ -88,10 +104,11 @@ var DUNGEON_CONFIG_EXTERNAL = {
         },
         8: {
             name: '毒沼泽地',
+            tier: 7,
             wallDensity: 0.25,
             monsterDensity: 0.1,
             treasureDensity: 0.035,
-            monsterPool: ['slime', 'spider', 'rat'],
+            monsterPool: ['swamp_beast', 'poison_drake', 'spider'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 50, max: 100 }], weight: 5 },
                 { items: [{ resource: 'crystal', min: 3, max: 6 }], weight: 3 },
@@ -101,10 +118,11 @@ var DUNGEON_CONFIG_EXTERNAL = {
         },
         9: {
             name: '虚空裂隙',
+            tier: 8,
             wallDensity: 0.15,
             monsterDensity: 0.12,
             treasureDensity: 0.04,
-            monsterPool: ['ghost', 'skeleton', 'spider'],
+            monsterPool: ['void_shade', 'rift_stalker', 'ghost'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 60, max: 120 }], weight: 5 },
                 { items: [{ resource: 'rune', min: 2, max: 4 }], weight: 3 },
