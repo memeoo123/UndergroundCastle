@@ -124,6 +124,50 @@ var ButtonManager = {
 // 存档系统
 var SaveSystem = {
     STORAGE_KEY: 'underground_castle_outside',
+    CURRENT_VERSION: 2,
+
+    _getDefaults: function() {
+        var cfg = _getResourceConfig();
+        var defaults = {};
+        var resKeys = Object.keys(cfg);
+        for (var i = 0; i < resKeys.length; i++) {
+            defaults[resKeys[i]] = cfg[resKeys[i]].initial || 0;
+        }
+        defaults.craftsman = { totalCapacity: 0 };
+        defaults.jobs = {};
+        defaults.buildings = {};
+        defaults.soldiers = [];
+        defaults.dungeon = null;
+        defaults.version = this.CURRENT_VERSION;
+        return defaults;
+    },
+
+    _migrate: function(data) {
+        var ver = data.version;
+        // 缺失或非 number 视为 v1
+        if (typeof ver !== 'number') {
+            ver = 1;
+        }
+        // 不做降级
+        if (ver > this.CURRENT_VERSION) {
+            return data;
+        }
+        // v1 → v2：补全 dungeon、士兵 speed、version
+        if (ver < 2) {
+            if (data.dungeon === undefined) {
+                data.dungeon = null;
+            }
+            if (Array.isArray(data.soldiers)) {
+                for (var i = 0; i < data.soldiers.length; i++) {
+                    if (typeof data.soldiers[i].speed !== 'number') {
+                        data.soldiers[i].speed = 10;
+                    }
+                }
+            }
+            data.version = 2;
+        }
+        return data;
+    },
 
     save: function(resources, craftsman, jobs, buildings, soldiers) {
         try {
@@ -133,24 +177,21 @@ var SaveSystem = {
             for (var i = 0; i < resKeys.length; i++) {
                 data[resKeys[i]] = resources[resKeys[i]] || 0;
             }
-            if (craftsman) {
-                data.craftsman = { totalCapacity: craftsman.totalCapacity || 0 };
-            }
+            data.craftsman = { totalCapacity: (craftsman && craftsman.totalCapacity) || 0 };
+            data.jobs = {};
             if (jobs) {
-                data.jobs = {};
                 var jobKeys = Object.keys(jobs);
                 for (var i = 0; i < jobKeys.length; i++) {
                     data.jobs[jobKeys[i]] = jobs[jobKeys[i]];
                 }
             }
+            data.buildings = {};
             if (buildings) {
-                data.buildings = {};
                 var bKeys = Object.keys(buildings);
                 for (var i = 0; i < bKeys.length; i++) {
                     data.buildings[bKeys[i]] = buildings[bKeys[i]];
                 }
             }
-            // 序列化士兵数据（10阶线性体系：存 tier/attack/defense/hp）
             if (soldiers && Array.isArray(soldiers)) {
                 data.soldiers = [];
                 for (var i = 0; i < soldiers.length; i++) {
@@ -159,35 +200,52 @@ var SaveSystem = {
                         tier: s.tier,
                         attack: s.attack,
                         defense: s.defense,
-                        hp: s.hp
+                        hp: s.hp,
+                        speed: s.speed || 10
                     });
                 }
             } else {
                 data.soldiers = [];
             }
+            // 追加地牢进度
+            if (typeof ProgressTracker !== 'undefined' && ProgressTracker && typeof ProgressTracker.saveProgress === 'function') {
+                data.dungeon = ProgressTracker.saveProgress();
+            } else {
+                data.dungeon = null;
+            }
+            data.version = this.CURRENT_VERSION;
             localStorage.setItem(this.STORAGE_KEY, JSON.stringify(data));
         } catch (e) {
-            // QuotaExceededError 或其他异常，静默处理，游戏继续运行
+            // QuotaExceededError 或 localStorage 不可用，静默处理
         }
     },
 
     load: function() {
-        var cfg = _getResourceConfig();
-        var defaults = { craftsman: { totalCapacity: 0 }, jobs: {}, buildings: {}, soldiers: [] };
-        var resKeys = Object.keys(cfg);
-        for (var i = 0; i < resKeys.length; i++) {
-            defaults[resKeys[i]] = cfg[resKeys[i]].initial || 0;
-        }
         try {
-            var data = localStorage.getItem(this.STORAGE_KEY);
-            if (data === null) return defaults;
-            var parsed = JSON.parse(data);
+            var raw = localStorage.getItem(this.STORAGE_KEY);
+            if (raw === null) return this._getDefaults();
+            var parsed;
+            try {
+                parsed = JSON.parse(raw);
+            } catch (e) {
+                return this._getDefaults();
+            }
+            if (!parsed || typeof parsed !== 'object') return this._getDefaults();
+
+            // 版本迁移
+            parsed = this._migrate(parsed);
+
+            var cfg = _getResourceConfig();
+            var resKeys = Object.keys(cfg);
             var result = {};
+
+            // 资源校验
             for (var i = 0; i < resKeys.length; i++) {
                 var key = resKeys[i];
                 result[key] = (typeof parsed[key] === 'number') ? parsed[key] : (cfg[key].initial || 0);
             }
-            // 恢复工匠数据
+
+            // 工匠校验
             if (parsed.craftsman && typeof parsed.craftsman === 'object') {
                 result.craftsman = {
                     totalCapacity: (typeof parsed.craftsman.totalCapacity === 'number') ? parsed.craftsman.totalCapacity : 0
@@ -195,29 +253,31 @@ var SaveSystem = {
             } else {
                 result.craftsman = { totalCapacity: 0 };
             }
-            // 恢复岗位分配数据
+
+            // 岗位校验：过滤未知 key（仅保留 JOB_CONFIG_EXTERNAL 中存在的岗位）
+            result.jobs = {};
             if (parsed.jobs && typeof parsed.jobs === 'object') {
-                result.jobs = {};
+                var validJobs = (typeof JOB_CONFIG_EXTERNAL !== 'undefined' && JOB_CONFIG_EXTERNAL.jobs) ? JOB_CONFIG_EXTERNAL.jobs : {};
                 var jobKeys = Object.keys(parsed.jobs);
                 for (var i = 0; i < jobKeys.length; i++) {
-                    result.jobs[jobKeys[i]] = (typeof parsed.jobs[jobKeys[i]] === 'number') ? parsed.jobs[jobKeys[i]] : 0;
+                    if (validJobs[jobKeys[i]]) {
+                        result.jobs[jobKeys[i]] = (typeof parsed.jobs[jobKeys[i]] === 'number') ? parsed.jobs[jobKeys[i]] : 0;
+                    }
                 }
-            } else {
-                result.jobs = {};
             }
-            // 恢复建筑数据
+
+            // 建筑校验
+            result.buildings = {};
             if (parsed.buildings && typeof parsed.buildings === 'object') {
-                result.buildings = {};
                 var bKeys = Object.keys(parsed.buildings);
                 for (var i = 0; i < bKeys.length; i++) {
                     result.buildings[bKeys[i]] = (typeof parsed.buildings[bKeys[i]] === 'number') ? parsed.buildings[bKeys[i]] : 0;
                 }
-            } else {
-                result.buildings = {};
             }
-            // 恢复士兵数据（10阶线性体系：恢复 tier/attack/defense/hp）
-            if (parsed.soldiers && Array.isArray(parsed.soldiers)) {
-                result.soldiers = [];
+
+            // 士兵校验
+            result.soldiers = [];
+            if (Array.isArray(parsed.soldiers)) {
                 for (var i = 0; i < parsed.soldiers.length; i++) {
                     var s = parsed.soldiers[i];
                     if (s && typeof s === 'object' && typeof s.tier === 'number') {
@@ -225,16 +285,31 @@ var SaveSystem = {
                             tier: s.tier,
                             attack: (typeof s.attack === 'number') ? s.attack : 0,
                             defense: (typeof s.defense === 'number') ? s.defense : 0,
-                            hp: (typeof s.hp === 'number') ? s.hp : 0
+                            hp: (typeof s.hp === 'number') ? s.hp : 0,
+                            speed: (typeof s.speed === 'number') ? s.speed : 10
                         });
                     }
                 }
-            } else {
-                result.soldiers = [];
             }
+
+            // 地牢进度校验
+            if (parsed.dungeon && typeof parsed.dungeon === 'object') {
+                var d = parsed.dungeon;
+                result.dungeon = {
+                    unlockedLayers: (Array.isArray(d.unlockedLayers) && d.unlockedLayers.length > 0) ? d.unlockedLayers : [1],
+                    completedLayers: Array.isArray(d.completedLayers) ? d.completedLayers : [],
+                    layerProgress: (d.layerProgress && typeof d.layerProgress === 'object') ? d.layerProgress : {},
+                    bestRecords: (d.bestRecords && typeof d.bestRecords === 'object') ? d.bestRecords : {},
+                    capturedFacilities: Array.isArray(d.capturedFacilities) ? d.capturedFacilities : []
+                };
+            } else {
+                result.dungeon = null;
+            }
+
+            result.version = parsed.version || this.CURRENT_VERSION;
             return result;
         } catch (e) {
-            return defaults;
+            return this._getDefaults();
         }
     }
 };
@@ -780,7 +855,7 @@ var CanvasRenderer = {
         var y = 395;
         var config = (typeof JOB_CONFIG_EXTERNAL !== 'undefined') ? JOB_CONFIG_EXTERNAL : {};
         var jobs = config.jobs || {};
-        var jobIds = Object.keys(jobs);
+        var jobIds = jobManager.getUnlockedJobIds();
         var btnSize = 30;
         var available = craftsmanManager.getAvailable();
 
@@ -1046,7 +1121,7 @@ var CanvasRenderer = {
         // 计算内容总高度
         var config = (typeof JOB_CONFIG_EXTERNAL !== 'undefined') ? JOB_CONFIG_EXTERNAL : {};
         var jobs = config.jobs || {};
-        var jobIds = Object.keys(jobs);
+        var jobIds = jobManager.getUnlockedJobIds();
         
         // 工匠状态行 + 倒计时行 + 岗位列表 + 产出预览
         var craftsmanHeight = 22;
@@ -1195,10 +1270,10 @@ var CanvasRenderer = {
         var scrollWidth = 450;
         var scrollHeight = 500;
 
-        // 计算内容总高度
+        // 计算内容总高度（只显示已解锁岗位）
         var config = (typeof JOB_CONFIG_EXTERNAL !== 'undefined') ? JOB_CONFIG_EXTERNAL : {};
         var jobs = config.jobs || {};
-        var jobIds = Object.keys(jobs);
+        var jobIds = jobManager.getUnlockedJobIds();
         
         var jobListHeight = jobIds.length * 40;
         var contentHeight = jobListHeight + 20;
@@ -1848,6 +1923,8 @@ var JobManager = {
     assign: function(jobId) {
         if (!CraftsmanManager.canAssign()) return false;
         if (!(jobId in this.assignments)) return false;
+        // 检查岗位是否已解锁
+        if (!this.isJobUnlocked(jobId)) return false;
         this.assignments[jobId] += 1;
         return true;
     },
@@ -1857,6 +1934,34 @@ var JobManager = {
         if (this.assignments[jobId] <= 0) return false;
         this.assignments[jobId] -= 1;
         return true;
+    },
+
+    /**
+     * 检查岗位是否已解锁
+     */
+    isJobUnlocked: function(jobId) {
+        var facCfg = (typeof FACILITY_CONFIG_EXTERNAL !== 'undefined') ? FACILITY_CONFIG_EXTERNAL : null;
+        if (!facCfg) return true; // 无配置则全部解锁
+        var pt = (typeof ProgressTracker !== 'undefined') ? ProgressTracker : null;
+        if (!pt) return true;
+        var unlocked = pt.getUnlockedJobs(facCfg);
+        return unlocked.indexOf(jobId) !== -1;
+    },
+
+    /**
+     * 获取已解锁的岗位 ID 列表
+     */
+    getUnlockedJobIds: function() {
+        var config = this._config || (typeof JOB_CONFIG_EXTERNAL !== 'undefined' ? JOB_CONFIG_EXTERNAL : {});
+        var allJobs = config.jobs || {};
+        var allIds = Object.keys(allJobs);
+        var result = [];
+        for (var i = 0; i < allIds.length; i++) {
+            if (this.isJobUnlocked(allIds[i])) {
+                result.push(allIds[i]);
+            }
+        }
+        return result;
     },
 
     getAssignments: function() {
@@ -2111,7 +2216,8 @@ var SoldierManager = {
             tier: 1,
             attack: t1.attack,
             defense: t1.defense,
-            hp: t1.hp
+            hp: t1.hp,
+            speed: t1.speed || 10
         };
         this.soldiers.push(soldier);
         return true;
@@ -2133,6 +2239,7 @@ var SoldierManager = {
         soldier.attack = tierDef.attack;
         soldier.defense = tierDef.defense;
         soldier.hp = tierDef.hp;
+        soldier.speed = tierDef.speed || 10;
         return true;
     },
 

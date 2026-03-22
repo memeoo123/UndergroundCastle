@@ -216,10 +216,47 @@ var DungeonMap = {
         }
         this.width = config.getMapWidth();
         this.height = config.getMapHeight();
-        this.entrance = config.getEntrance();
+
+        // 第1层入口固定在中心，其他层入口随机（避开边缘2格）
+        if (layerId === 1) {
+            this.entrance = config.getEntrance();
+        } else {
+            var margin = 3;
+            var rx = margin + Math.floor(Math.random() * (this.width - margin * 2));
+            var ry = margin + Math.floor(Math.random() * (this.height - margin * 2));
+            this.entrance = { x: rx, y: ry };
+        }
+
         var layerCfg = config.getDungeonLayer(layerId);
         if (!layerCfg) layerCfg = config._defaults.dungeon.layers[1];
         this._generate(layerCfg);
+
+        // 放置可占领设施（来自 facility-config.js）
+        var facCfg = (typeof FACILITY_CONFIG_EXTERNAL !== 'undefined') ? FACILITY_CONFIG_EXTERNAL : null;
+        if (facCfg && facCfg.layerFacilities && facCfg.layerFacilities[layerId]) {
+            var facilities = facCfg.layerFacilities[layerId];
+            for (var fi = 0; fi < facilities.length; fi++) {
+                var f = facilities[fi];
+                if (this.isInBounds(f.x, f.y) && this.tiles[f.y][f.x].type !== 'entrance' && this.tiles[f.y][f.x].type !== 'portal') {
+                    // 强制清除设施格子及周围1格的墙壁，确保可达
+                    for (var ddy = -1; ddy <= 1; ddy++) {
+                        for (var ddx = -1; ddx <= 1; ddx++) {
+                            var cx = f.x + ddx, cy = f.y + ddy;
+                            if (this.isInBounds(cx, cy) && this.tiles[cy][cx].type === 'wall') {
+                                this.tiles[cy][cx].type = 'empty';
+                            }
+                        }
+                    }
+                    this.tiles[f.y][f.x].content = {
+                        type: 'capturable_facility',
+                        facilityId: f.id,
+                        facilityType: f.type,
+                        name: f.name,
+                        unlockJobs: f.unlockJobs || []
+                    };
+                }
+            }
+        }
     },
 
     /**
@@ -248,6 +285,17 @@ var DungeonMap = {
 
         // 设置入口
         this.tiles[entrance.y][entrance.x].type = 'entrance';
+
+        // 放置固定下层入口（传送阵）
+        if (rlCfg.portal) {
+            var px = rlCfg.portal.x, py = rlCfg.portal.y;
+            if (this.isInBounds(px, py) && !(px === entrance.x && py === entrance.y)) {
+                this.tiles[py][px].type = 'portal';
+                this.tiles[py][px].content = { type: 'portal', bossId: null };
+                this.portalPos = { x: px, y: py };
+                this.bossPos = this.portalPos;
+            }
+        }
 
         // 放置固定墙壁
         var walls = rlCfg.walls || [];
@@ -537,6 +585,7 @@ var ProgressTracker = {
     completedLayers: [],     // 已完成层级（Boss 已击败）
     layerProgress: {},       // 每层探索进度 { layerId: { fogState, bossDefeated } }
     bestRecords: {},         // 最佳记录 { layerId: { resourcesGained } }
+    capturedFacilities: [],  // 已占领设施 ID 列表（永久）
 
     init: function(savedData) {
         if (savedData && typeof savedData === 'object') {
@@ -552,12 +601,16 @@ var ProgressTracker = {
             this.bestRecords = savedData.bestRecords && typeof savedData.bestRecords === 'object'
                 ? JSON.parse(JSON.stringify(savedData.bestRecords))
                 : {};
+            this.capturedFacilities = Array.isArray(savedData.capturedFacilities)
+                ? savedData.capturedFacilities.slice()
+                : [];
         } else {
             // 默认初始化：第一层解锁
             this.unlockedLayers = [1];
             this.completedLayers = [];
             this.layerProgress = {};
             this.bestRecords = {};
+            this.capturedFacilities = [];
         }
         // 确保第一层始终在已解锁列表中
         if (this.unlockedLayers.indexOf(1) === -1) {
@@ -597,7 +650,8 @@ var ProgressTracker = {
             unlockedLayers: this.unlockedLayers.slice(),
             completedLayers: this.completedLayers.slice(),
             layerProgress: JSON.parse(JSON.stringify(this.layerProgress)),
-            bestRecords: JSON.parse(JSON.stringify(this.bestRecords))
+            bestRecords: JSON.parse(JSON.stringify(this.bestRecords)),
+            capturedFacilities: this.capturedFacilities.slice()
         };
     },
 
@@ -640,6 +694,66 @@ var ProgressTracker = {
         if (this.layerProgress[layerId]) {
             this.layerProgress[layerId].bossDefeated = false;
         }
+    },
+
+    /**
+     * 占领设施
+     * @param {string} facilityId - 设施唯一 ID
+     * @returns {boolean} 是否为新占领
+     */
+    captureFacility: function(facilityId) {
+        if (this.capturedFacilities.indexOf(facilityId) !== -1) {
+            return false; // 已占领
+        }
+        this.capturedFacilities.push(facilityId);
+        return true;
+    },
+
+    /**
+     * 检查设施是否已占领
+     */
+    isFacilityCaptured: function(facilityId) {
+        return this.capturedFacilities.indexOf(facilityId) !== -1;
+    },
+
+    /**
+     * 获取所有已解锁的工作岗位 ID 列表
+     * @param {object} facilityConfig - FACILITY_CONFIG_EXTERNAL
+     * @returns {string[]}
+     */
+    getUnlockedJobs: function(facilityConfig) {
+        var cfg = facilityConfig || (typeof FACILITY_CONFIG_EXTERNAL !== 'undefined' ? FACILITY_CONFIG_EXTERNAL : null);
+        if (!cfg) return [];
+        var jobs = (cfg.defaultUnlockedJobs || []).slice();
+
+        // 从 facilityTypeUnlocks 映射表查找：已占领的设施类型 → 解锁岗位
+        var typeUnlocks = cfg.facilityTypeUnlocks || {};
+        for (var i = 0; i < this.capturedFacilities.length; i++) {
+            var fType = this.capturedFacilities[i]; // 占领时存的就是设施类型
+            var unlocks = typeUnlocks[fType] || [];
+            for (var j = 0; j < unlocks.length; j++) {
+                if (jobs.indexOf(unlocks[j]) === -1) {
+                    jobs.push(unlocks[j]);
+                }
+            }
+        }
+
+        // 兼容旧的 layerFacilities 按 id 查找
+        var layers = cfg.layerFacilities || {};
+        for (var layerId in layers) {
+            var facilities = layers[layerId];
+            for (var i = 0; i < facilities.length; i++) {
+                if (this.capturedFacilities.indexOf(facilities[i].id) !== -1) {
+                    var unlocks = facilities[i].unlockJobs || [];
+                    for (var j = 0; j < unlocks.length; j++) {
+                        if (jobs.indexOf(unlocks[j]) === -1) {
+                            jobs.push(unlocks[j]);
+                        }
+                    }
+                }
+            }
+        }
+        return jobs;
     }
 };
 
@@ -1076,7 +1190,7 @@ var ExplorationManager = {
         this._started = false;
         this._isResourceLayer = this._configLoader.isResourceLayer ? this._configLoader.isResourceLayer(layer) : false;
 
-        var entrance = this._configLoader.getEntrance();
+        var entrance = this._dungeonMap.entrance;
         this.playerPos = { x: entrance.x, y: entrance.y };
 
         // 初始化迷雾并点亮入口周围
@@ -1129,8 +1243,8 @@ var ExplorationManager = {
         fog.reveal(newX, newY, viewRange);
 
         // 检查是否走回入口（探险结束）
-        var entrance = config.getEntrance();
-        if (newX === entrance.x && newY === entrance.y) {
+        var entrance = map.entrance;
+        if (this._started && newX === entrance.x && newY === entrance.y) {
             var summary = this.endExploration(false);
             return { success: true, ended: true, summary: summary };
         }
@@ -1203,7 +1317,17 @@ var ExplorationManager = {
 
         // 矿产设施返回提示
         if (tile.content.type === 'facility' && !tile.content.collected) {
-            return { type: 'facility', name: tile.content.name, resource: tile.content.resource, amount: tile.content.amount };
+            return { type: 'facility', facilityType: tile.content.facilityType, name: tile.content.name, resource: tile.content.resource, amount: tile.content.amount };
+        }
+
+        // 可占领设施
+        if (tile.content.type === 'capturable_facility') {
+            return {
+                type: 'capturable_facility',
+                facilityId: tile.content.facilityId,
+                name: tile.content.name,
+                unlockJobs: tile.content.unlockJobs
+            };
         }
 
         return null;
@@ -1442,6 +1566,9 @@ var DungeonRenderer = {
             }
         }
 
+        // 设施名称标签（单独遍历，画在所有 tile 之上，避免被下一行 tile 背景覆盖）
+        this._drawFacilityLabels(ctx, dungeonMap, fogOfWar);
+
         // 绘制玩家
         this.drawPlayer(ctx, playerPos.x, playerPos.y);
 
@@ -1564,6 +1691,21 @@ var DungeonRenderer = {
                     ctx.lineWidth = 1;
                     ctx.strokeRect(px + ts * 0.1, py + ts * 0.1, ts * 0.8, ts * 0.8);
                 }
+            } else if (tile.content.type === 'capturable_facility') {
+                // 可占领设施：带旗帜标记的彩色方块 + 名称文字
+                var cfType = tile.content.facilityType || '_default';
+                var cfColor = (this.colors.facilityIcons && this.colors.facilityIcons[cfType])
+                    ? this.colors.facilityIcons[cfType] : '#44aa44';
+                ctx.fillStyle = cfColor;
+                ctx.fillRect(px + ts * 0.1, py + ts * 0.1, ts * 0.8, ts * 0.8);
+                // 旗帜标记（三角形）
+                ctx.fillStyle = '#ffdd00';
+                ctx.beginPath();
+                ctx.moveTo(px + ts * 0.3, py + ts * 0.2);
+                ctx.lineTo(px + ts * 0.7, py + ts * 0.4);
+                ctx.lineTo(px + ts * 0.3, py + ts * 0.6);
+                ctx.closePath();
+                ctx.fill();
             }
         }
 
@@ -1587,6 +1729,32 @@ var DungeonRenderer = {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1;
         ctx.stroke();
+    },
+
+    _drawFacilityLabels: function(ctx, dungeonMap, fogOfWar) {
+        var ts = this.tileSize;
+        if (ts < 6) return;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = Math.max(8, Math.floor(ts * 0.7)) + 'px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        for (var y = 0; y < dungeonMap.height; y++) {
+            for (var x = 0; x < dungeonMap.width; x++) {
+                if (!fogOfWar.isRevealed(x, y)) continue;
+                var tile = dungeonMap.getTile(x, y);
+                if (!tile || !tile.content) continue;
+                var name = null;
+                if (tile.content.type === 'facility' || tile.content.type === 'capturable_facility') {
+                    name = tile.content.name || null;
+                }
+                if (name) {
+                    var px = this.offsetX + x * ts;
+                    var py = this.offsetY + y * ts;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(name, px + ts / 2, py + ts + 1);
+                }
+            }
+        }
     },
 
     drawPartyStatus: function(ctx, x, y, width, party) {

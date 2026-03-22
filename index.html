@@ -29,6 +29,7 @@
     <script src="monster-config.js"></script>
     <script src="boss-config.js"></script>
     <script src="combat-config.js"></script>
+    <script src="facility-config.js"></script>
     <script src="outside-logic.js"></script>
     <script src="inside-logic.js"></script>
     <script>
@@ -112,23 +113,20 @@
             }
         },
 
-        // 地牢进度持久化辅助
+        // 地牢进度持久化辅助（通过 SaveSystem 统一读写）
         _loadDungeonProgress: function() {
-            try {
-                var raw = localStorage.getItem('underground_castle_outside');
-                if (!raw) return null;
-                var data = JSON.parse(raw);
-                return data.dungeon || null;
-            } catch (e) { return null; }
+            var saved = SaveSystem.load();
+            return saved.dungeon || null;
         },
 
         _saveDungeonProgress: function() {
-            try {
-                var raw = localStorage.getItem('underground_castle_outside');
-                var data = raw ? JSON.parse(raw) : {};
-                data.dungeon = ProgressTracker.saveProgress();
-                localStorage.setItem('underground_castle_outside', JSON.stringify(data));
-            } catch (e) { /* QuotaExceededError — 静默处理 */ }
+            SaveSystem.save(
+                ResourceManager.getResources(),
+                CraftsmanManager,
+                JobManager.getAssignments(),
+                BuildingManager.getBuildCounts(),
+                SoldierManager.getSoldiers()
+            );
         }
     };
 
@@ -154,13 +152,18 @@
 
         var canvas = document.getElementById('gameCanvas');
 
+        // 恢复存档（配置驱动）— 统一调用一次 SaveSystem.load()
+        var saved = SaveSystem.load();
+
+        // 初始化地牢进度（用于岗位解锁判断）
+        ProgressTracker.init(saved.dungeon || null);
+
         // 初始化 JobManager 和 BuildingManager（从外置配置）
         var jobConfig = (typeof JOB_CONFIG_EXTERNAL !== 'undefined') ? JOB_CONFIG_EXTERNAL : { jobs: {}, buildings: {} };
         JobManager.init(jobConfig);
         BuildingManager.init(jobConfig.buildings || {});
 
-        // 恢复存档（配置驱动）
-        var saved = SaveSystem.load();
+        // 恢复资源
         var resCfg = (typeof RESOURCE_CONFIG_EXTERNAL !== 'undefined' && RESOURCE_CONFIG_EXTERNAL.resources)
             ? RESOURCE_CONFIG_EXTERNAL.resources : {};
         var resKeys = Object.keys(resCfg);
@@ -198,11 +201,6 @@
             SoldierManager.soldiers = saved.soldiers;
         } else {
             SoldierManager.soldiers = [];
-        }
-
-        // 恢复地牢进度
-        if (saved.dungeon) {
-            ProgressTracker.init(saved.dungeon);
         }
 
         // 初始化渲染器
@@ -344,11 +342,12 @@
     // 探索界面点击处理（9.6 方向控制交互）
     // ============================================================
     function handleExplorationClick(clickX, clickY, canvasW, canvasH) {
-        // 根据点击位置相对 Canvas 中心判定方向
-        var centerX = canvasW / 2;
-        var centerY = canvasH / 2;
-        var dx = clickX - centerX;
-        var dy = clickY - centerY;
+        // 根据点击位置相对玩家角色屏幕位置判定方向
+        var ts = DungeonRenderer.tileSize;
+        var playerScreenX = DungeonRenderer.offsetX + ExplorationManager.playerPos.x * ts + ts / 2;
+        var playerScreenY = DungeonRenderer.offsetY + ExplorationManager.playerPos.y * ts + ts / 2;
+        var dx = clickX - playerScreenX;
+        var dy = clickY - playerScreenY;
 
         var direction;
         if (Math.abs(dx) > Math.abs(dy)) {
@@ -395,6 +394,22 @@
             } else if (enc.type === 'facility') {
                 // 自动采集矿产设施
                 ExplorationManager.collectFacility();
+                // 同时按设施类型触发占领（解锁对应岗位）
+                if (enc.facilityType) {
+                    var isNew = ProgressTracker.captureFacility(enc.facilityType);
+                    if (isNew) {
+                        SceneManager._saveDungeonProgress();
+                    }
+                }
+            } else if (enc.type === 'capturable_facility') {
+                // 占领设施
+                var isNew = ProgressTracker.captureFacility(enc.facilityId);
+                if (isNew) {
+                    SceneManager._saveDungeonProgress();
+                }
+                // 清除地块内容，防止重复触发
+                var tile = DungeonMap.getTile(ExplorationManager.playerPos.x, ExplorationManager.playerPos.y);
+                if (tile) tile.content = null;
             } else if (enc.type === 'monster') {
                 // 触发怪物战斗（单个怪物）
                 CombatEngine.initMonsterFight(ExplorationManager.party, enc.monsterId, ConfigLoader);
@@ -403,7 +418,14 @@
                         if (state === 'victory') {
                             var rewards = CombatEngine.getRewards();
                             ExplorationManager.addCombatRewards(rewards);
-                            SceneManager.switchTo('exploration');
+                            // 清除已击败怪物的地块内容，防止重复触发
+                            var px = ExplorationManager.playerPos.x;
+                            var py = ExplorationManager.playerPos.y;
+                            var tile = DungeonMap.getTile(px, py);
+                            if (tile && tile.content && tile.content.type === 'monster') {
+                                tile.content = null;
+                            }
+                            SceneManager.switchTo('exploration', { _skipInit: true });
                         } else {
                             // 全灭：不保留资源，返回关外
                             ExplorationManager.endExploration(true);
@@ -413,10 +435,45 @@
                     }
                 });
             } else if (enc.type === 'portal') {
-                // 踏入传送阵触发 Boss 战
                 var layerCfg = ConfigLoader.getDungeonLayer(ExplorationManager.currentLayer);
                 var bossId = enc.bossId || (layerCfg ? layerCfg.bossId : null);
-                if (!bossId) return;
+
+                if (!bossId) {
+                    // 无 Boss 层：踩到传送阵直接标记完成并显示传送选择
+                    ProgressTracker.markLayerComplete(ExplorationManager.currentLayer);
+                    SceneManager._saveDungeonProgress();
+
+                    var curLayer = ExplorationManager.currentLayer;
+                    PortalSelectUI.show(curLayer, ProgressTracker.unlockedLayers, function(targetLayer) {
+                        if (targetLayer === null) {
+                            var summary = ExplorationManager.endExploration(false);
+                            if (summary && summary.preserved) {
+                                var res = summary.resources;
+                                for (var key in res) {
+                                    if (res[key] > 0) {
+                                        ResourceManager.addResource(key, res[key]);
+                                    }
+                                }
+                            }
+                            SceneManager._saveDungeonProgress();
+                            SceneManager.switchTo('outside');
+                        } else {
+                            var party = ExplorationManager.party;
+                            var resources = ExplorationManager.getResourceSummary();
+                            DungeonMap.init(targetLayer, ConfigLoader);
+                            FogOfWar.init(DungeonMap.width, DungeonMap.height);
+                            ExplorationManager.init(targetLayer, party, null, DungeonMap, FogOfWar, ConfigLoader);
+                            for (var rk in resources) {
+                                ExplorationManager.collectedResources[rk] = (ExplorationManager.collectedResources[rk] || 0) + resources[rk];
+                            }
+                            SceneManager.switchTo('exploration', { layer: targetLayer, party: party, _skipInit: true });
+                        }
+                    });
+                    SceneManager.currentScene = 'portal-select';
+                    return;
+                }
+
+                // 有 Boss 层：踏入传送阵触发 Boss 战
                 CombatEngine.initBossFight(ExplorationManager.party, bossId, ConfigLoader);
                 SceneManager.switchTo('combat', {
                     callback: function(state) {
@@ -544,42 +601,6 @@
     }
 
 
-
-    // ============================================================
-    // 扩展 SaveSystem 支持地牢进度持久化（9.3）
-    // ============================================================
-    (function() {
-        var origSave = SaveSystem.save;
-        var origLoad = SaveSystem.load;
-
-        SaveSystem.save = function(resources, craftsman, jobs, buildings, soldiers) {
-            origSave.call(SaveSystem, resources, craftsman, jobs, buildings, soldiers);
-            // 在已保存的数据上追加 dungeon 字段
-            try {
-                var raw = localStorage.getItem(SaveSystem.STORAGE_KEY);
-                if (raw) {
-                    var data = JSON.parse(raw);
-                    data.dungeon = ProgressTracker.saveProgress();
-                    localStorage.setItem(SaveSystem.STORAGE_KEY, JSON.stringify(data));
-                }
-            } catch (e) { /* 静默处理 */ }
-        };
-
-        SaveSystem.load = function() {
-            var result = origLoad.call(SaveSystem);
-            // 从存档中恢复 dungeon 字段
-            try {
-                var raw = localStorage.getItem(SaveSystem.STORAGE_KEY);
-                if (raw) {
-                    var data = JSON.parse(raw);
-                    result.dungeon = data.dungeon || null;
-                }
-            } catch (e) {
-                result.dungeon = null;
-            }
-            return result;
-        };
-    })();
 
     // ============================================================
     // 在 Castle_Page 添加"探险"按钮（9.4）

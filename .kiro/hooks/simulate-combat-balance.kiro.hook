@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "name": "战斗平衡模拟检查",
+  "description": "当战斗相关配置文件被修改时，模拟每阶同阶战斗（考虑上阵人数、ATB速度、减法公式），确认同阶满编士兵队伍能打赢同阶普通怪物。",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "monster-config.js",
+      "soldier-config.js",
+      "boss-config.js",
+      "combat-config.js"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "读取 monster-config.js、soldier-config.js、combat-config.js，对每个阶数（1-8）模拟同阶战斗：\n\n模拟规则：\n- 我方：该阶士兵 × 该阶上阵人数（soldier-config.js 的 teamSize），共享血量池（所有士兵hp之和）\n- 敌方：该阶任意一个普通怪物（取该阶第一个怪物），永远1个单位\n- 伤害公式（减法）：我方 damage = max(D_min, (士兵攻击 - 怪物防御) × 上阵人数)，敌方 damage = max(D_min, 怪物攻击 - 士兵防御)\n- ATB速度：攻击间隔 = speed_baseline / 速度（秒），speed_baseline=10\n- 模拟到一方血量归零\n\n对每阶输出：胜负结果、我方剩余血量百分比。\n如果任何阶数出现士兵队伍输给普通怪物的情况，高亮警告并列出具体数值。全部通过则简短确认。"
+  }
+}

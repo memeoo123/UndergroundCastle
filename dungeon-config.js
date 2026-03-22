@@ -30,49 +30,49 @@ var DUNGEON_CONFIG_EXTERNAL = {
                 { items: [{ resource: 'iron', min: 1, max: 3 }], weight: 3 },
                 { items: [{ resource: 'crystal', min: 1, max: 1 }], weight: 1 }
             ],
-            bossId: 'goblin_king'
+            bossId: null
         },
         2: {
             name: '暗影地穴',
-            tier: 2,
+            tier: 1,
             wallDensity: 0.25,
             monsterDensity: 0.07,
             treasureDensity: 0.03,
-            monsterPool: ['skeleton', 'ghost', 'spider'],
+            monsterPool: ['slime', 'bat', 'rat'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 10, max: 30 }], weight: 5 },
-                { items: [{ resource: 'steel', min: 1, max: 2 }], weight: 3 },
-                { items: [{ resource: 'rune', min: 1, max: 1 }], weight: 1 }
+                { items: [{ resource: 'iron', min: 1, max: 3 }], weight: 3 },
+                { items: [{ resource: 'crystal', min: 1, max: 1 }], weight: 1 }
             ],
-            bossId: 'shadow_lord'
+            bossId: null
         },
         3: {
             name: '蘑菇森林',
-            tier: 3,
+            tier: 1,
             wallDensity: 0.28,
             monsterDensity: 0.06,
             treasureDensity: 0.025,
-            monsterPool: ['mushroom', 'cave_worm', 'spider'],
+            monsterPool: ['slime', 'bat', 'rat'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 15, max: 40 }], weight: 5 },
                 { items: [{ resource: 'wood', min: 10, max: 20 }], weight: 4 },
                 { items: [{ resource: 'crystal', min: 1, max: 2 }], weight: 2 }
             ],
-            bossId: 'mushroom_king'
+            bossId: null
         },
         4: {
-            name: '熔岩洞窟',
-            tier: 4,
+            name: '哥布林巢穴',
+            tier: 1,
             wallDensity: 0.22,
             monsterDensity: 0.08,
             treasureDensity: 0.03,
-            monsterPool: ['fire_imp', 'lava_hound', 'skeleton'],
+            monsterPool: ['slime', 'bat', 'rat'],
             treasurePool: [
                 { items: [{ resource: 'gold', min: 20, max: 50 }], weight: 5 },
                 { items: [{ resource: 'iron', min: 3, max: 6 }], weight: 4 },
-                { items: [{ resource: 'steel', min: 1, max: 3 }], weight: 2 }
+                { items: [{ resource: 'crystal', min: 1, max: 2 }], weight: 2 }
             ],
-            bossId: 'flame_guardian'
+            bossId: 'goblin_king'
         },
         6: {
             name: '冰封深渊',
@@ -140,6 +140,7 @@ var DUNGEON_CONFIG_EXTERNAL = {
             mapWidth: 20,
             mapHeight: 20,
             entrance: { x: 10, y: 10 },
+            portal: { x: 10, y: 2 },
             // 矿产设施位置和类型
             facilities: [
                 { x: 5, y: 5, type: 'lumber_mill', name: '木厂', resource: 'wood', amount: { min: 20, max: 40 } },
@@ -158,6 +159,7 @@ var DUNGEON_CONFIG_EXTERNAL = {
             mapWidth: 25,
             mapHeight: 25,
             entrance: { x: 12, y: 12 },
+            portal: { x: 12, y: 2 },
             facilities: [
                 { x: 4, y: 4, type: 'iron_mine', name: '铁矿', resource: 'iron', amount: { min: 8, max: 15 } },
                 { x: 20, y: 4, type: 'iron_mine', name: '铁矿', resource: 'iron', amount: { min: 8, max: 15 } },
@@ -175,6 +177,7 @@ var DUNGEON_CONFIG_EXTERNAL = {
             mapWidth: 30,
             mapHeight: 30,
             entrance: { x: 15, y: 15 },
+            portal: { x: 15, y: 3 },
             facilities: [
                 { x: 5, y: 5, type: 'crystal_mine', name: '水晶矿', resource: 'crystal', amount: { min: 10, max: 20 } },
                 { x: 25, y: 5, type: 'crystal_mine', name: '水晶矿', resource: 'crystal', amount: { min: 10, max: 20 } },
@@ -190,6 +193,7 @@ var DUNGEON_CONFIG_EXTERNAL = {
             mapWidth: 30,
             mapHeight: 30,
             entrance: { x: 15, y: 15 },
+            portal: { x: 15, y: 3 },
             facilities: [
                 { x: 5, y: 5, type: 'rune_altar', name: '符文祭坛', resource: 'rune', amount: { min: 5, max: 10 } },
                 { x: 25, y: 5, type: 'rune_altar', name: '符文祭坛', resource: 'rune', amount: { min: 5, max: 10 } },

@@ -1,12 +1,12 @@
 // boss-config.js — Boss 外置配置（基于标准敌人表-10阶-减法，血量约2.5倍普通怪）
 var BOSS_CONFIG_EXTERNAL = {
     bosses: {
-        // 1阶 Boss（第1层）
+        // 1阶 Boss（第4层，进入第5层资源层的关卡）
         goblin_king: {
             name: '哥布林王',
             tier: 1,
-            stats: { hp: 800, attack: 54, defense: 20, speed: 10 },
-            skills: ['basic_attack', 'power_strike', 'war_cry'],
+            stats: { hp: 400, attack: 30, defense: 15, speed: 8 },
+            skills: ['basic_attack', 'power_strike'],
             rewards: {
                 gold: { min: 20, max: 50 },
                 exp: 50,
